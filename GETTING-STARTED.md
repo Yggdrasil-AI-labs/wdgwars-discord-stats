@@ -1,0 +1,77 @@
+# Getting started
+
+Zero to a live WDGoWars stats display in your Discord. The only manual part is
+making a bot (step 2); everything else is one command.
+
+## What you need
+- Python 3.8+ (`python --version`)
+- A Discord server where you have admin / Manage Server
+- A WDGoWars account
+
+## Step 1: get the code
+```sh
+git clone https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats.git
+cd wdgwars-discord-stats
+```
+No dependencies to install, it's standard-library Python.
+
+## Step 2: make a Discord bot
+1. [Discord Developer Portal](https://discord.com/developers/applications) -> **New Application** (name it anything).
+2. Copy the **Application ID** from **General Information** (used in step 4).
+3. **Bot** tab -> **Reset Token** -> **Copy**. That is your bot token.
+4. Invite it to your server, paste this in a browser with your Application ID
+   swapped in (`permissions=16` is "Manage Channels", the only one it needs):
+   ```
+   https://discord.com/oauth2/authorize?client_id=YOUR_APP_ID&scope=bot&permissions=16
+   ```
+5. Get your server id: Discord **Settings -> Advanced -> Developer Mode** on,
+   then right-click your server icon -> **Copy Server ID**.
+
+## Step 3: configure
+Two ways, pick one:
+
+**A. Interactive (easiest):** just run it and answer the prompts:
+```sh
+python live_stats_channels.py --setup
+```
+With nothing configured yet, it asks for your key, bot token, and server id
+(input is hidden for the secrets), saves them to a local `.env`, then builds.
+
+**B. By hand:** copy the template and fill it in:
+```sh
+cp .env.example .env    # then edit: WDGWARS_API_KEY, DISCORD_BOT_TOKEN, DISCORD_GUILD_ID
+```
+
+## Step 4: check + build
+```sh
+python live_stats_channels.py --check   # validates token, server, permissions, key
+python live_stats_channels.py --setup   # creates category + #stats-config + panel, then populates
+```
+`--check` tells you exactly what is wrong if something is off (bad token, bot not
+invited, missing permission, bad key), with the fix. `--setup` is safe to re-run.
+
+Prefer to preview with no writes first? `python live_stats_channels.py --sample --dry-run`.
+
+## Step 5: keep it updating
+The script has no GitHub dependency, run it any way you like:
+```sh
+python live_stats_channels.py            # run continuously (5-min loop) on any machine
+python live_stats_channels.py --once     # one update; schedule with your own cron/Task Scheduler
+```
+- **systemd** (a server/Pi you own): see [`systemd/`](systemd/).
+- **GitHub Actions** (no machine at all): add the three values as repo Actions
+  secrets; [`.github/workflows/live-stats.yml`](.github/workflows/live-stats.yml)
+  updates it every ~10 min. Run `--setup` once locally first.
+
+## Step 6: choose what to show
+- **In Discord:** in `#stats-config`, type `hide ble`, `show rank`, `hide all`,
+  `show all`, or `list`. Applies on the next tick (~5 min).
+- **Config file:** `~/.wdgwars-live-stats.json`, e.g. `{"fields": {"BLE": false}}`.
+- **Env var** (for GitHub Actions): `STATS_FIELDS_OFF=BLE,Rank`.
+
+## Good to know
+- Toggles are not instant; they apply on the next 5-minute tick.
+- It only reads `/api/me`, it never uploads or changes your WDGoWars account.
+- Discord rate-limits channel renames; if you restart often in a short window,
+  the tool backs off and catches up. That is normal.
+- No always-on machine? Use the GitHub Actions option, no server required.

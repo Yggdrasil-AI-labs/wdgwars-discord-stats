@@ -521,6 +521,97 @@ def dry_run(sample: bool) -> int:
     return 0
 
 
+def preflight():
+    """Validate config against Discord + WDGoWars before doing any work.
+    Returns (checks, can_write, key_ok): checks is a list of (ok, message);
+    can_write is True only if the bot token + guild + Manage Channels all pass;
+    key_ok is True/False/None (None = no key set to test)."""
+    checks = []
+    me = discord_api("GET", "/users/@me")
+    if not (isinstance(me, dict) and me.get("id")):
+        checks.append((False, "Discord rejected the bot token. Re-copy it from the "
+                              "Developer Portal (Bot -> Reset Token)."))
+        return checks, False, None
+    checks.append((True, f"bot token OK (logged in as {me.get('username', 'bot')})"))
+    invite = (f"https://discord.com/oauth2/authorize?client_id={me['id']}"
+              "&scope=bot&permissions=16")
+
+    guild = discord_api("GET", f"/guilds/{GUILD_ID}")
+    if not (isinstance(guild, dict) and guild.get("id")):
+        checks.append((False, f"Bot is not in server {GUILD_ID} (or the id is wrong). "
+                              f"Invite it: {invite}"))
+        return checks, False, None
+    checks.append((True, f"bot is in server {guild.get('name', GUILD_ID)!r}"))
+
+    perms = 0
+    member = discord_api("GET", f"/guilds/{GUILD_ID}/members/{me['id']}")
+    roles = discord_api("GET", f"/guilds/{GUILD_ID}/roles")
+    if isinstance(roles, list) and isinstance(member, dict):
+        held = set(member.get("roles", [])) | {GUILD_ID}  # @everyone role id == guild id
+        for r in roles:
+            if r.get("id") in held:
+                try:
+                    perms |= int(r.get("permissions", 0))
+                except (TypeError, ValueError):
+                    pass
+    # 0x8 = Administrator, 0x10 = Manage Channels
+    can_write = bool(guild.get("owner_id") == me["id"] or perms & 0x8 or perms & 0x10)
+    checks.append((can_write, "bot has Manage Channels" if can_write else
+                   f"Bot lacks Manage Channels in this server. Re-invite: {invite}"))
+
+    key_ok = None
+    if WDGO_KEY:
+        m2, _, status = wdgo_api("/endpoint/me")
+        key_ok = bool(m2 and m2.get("ok"))
+        checks.append((key_ok, f"WDGoWars key OK (user {m2.get('username')})" if key_ok
+                       else f"wdgwars.pl rejected your API key (HTTP {status}). "
+                            "Re-copy it from wdgwars.pl/profile."))
+    else:
+        checks.append((False, "WDGWARS_API_KEY is not set."))
+    return checks, can_write, key_ok
+
+
+def print_checks(checks) -> None:
+    for ok, msg in checks:
+        print(f"  {'✓' if ok else '✗'} {msg}")
+
+
+def run_wizard() -> bool:
+    """Interactively collect the three secrets, write .env, and update the live
+    config. Only runs on a real terminal; returns False otherwise so cron/CI
+    fall back to env/.env. Secrets are entered with hidden input."""
+    if not sys.stdin.isatty():
+        return False
+    import getpass
+    print("No configuration found. Let's set it up (saved to a local .env file).\n"
+          "Get your API key from wdgwars.pl/profile, and your bot token + server id\n"
+          "from the Discord Developer Portal (see the README if you have not made a bot).\n")
+    key = getpass.getpass("WDGoWars API key (hidden): ").strip()
+    token = getpass.getpass("Discord bot token (hidden): ").strip()
+    guild = input("Discord server (guild) id: ").strip()
+    if not (key and token and guild):
+        print("Setup cancelled (all three values are required).")
+        return False
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if os.path.exists(env_path):
+        if input(f"{env_path} already exists. Overwrite? [y/N] ").strip().lower() != "y":
+            print("Kept existing .env; using its values.")
+            return False
+    with open(env_path, "w") as f:
+        f.write(f"WDGWARS_API_KEY={key}\nDISCORD_BOT_TOKEN={token}\n"
+                f"DISCORD_GUILD_ID={guild}\n")
+    try:
+        os.chmod(env_path, 0o600)
+    except OSError:
+        pass
+    global TOKEN, WDGO_KEY, GUILD_ID
+    TOKEN, WDGO_KEY, GUILD_ID = token, key, guild
+    os.environ.update({"DISCORD_BOT_TOKEN": token, "WDGWARS_API_KEY": key,
+                       "DISCORD_GUILD_ID": guild})
+    print(f"Saved to {env_path} (readable only by you).\n")
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Show WDGoWars stats as Discord voice-channel labels.")
@@ -532,6 +623,8 @@ def main() -> int:
                         help="use canned stats (no API key, no network)")
     parser.add_argument("--setup", action="store_true",
                         help="create the category + mod-config channel + panel, then exit")
+    parser.add_argument("--check", action="store_true",
+                        help="validate token/server/permissions/key and exit (no changes)")
     args = parser.parse_args()
 
     # Field labels contain emoji; make sure stdout can render them even on a
@@ -549,12 +642,27 @@ def main() -> int:
     if args.dry_run:
         return dry_run(args.sample)
 
+    # First run with nothing configured: offer an interactive setup. TTY only,
+    # so cron/CI just fall through to the env/.env values.
+    if not args.sample and not (TOKEN and GUILD_ID):
+        run_wizard()
+
+    if args.check:
+        print("Config check:")
+        checks, can_write, key_ok = preflight()
+        print_checks(checks)
+        return 0 if (can_write and key_ok) else 1
+
     if not TOKEN:
-        raise SystemExit("set DISCORD_BOT_TOKEN")
+        raise SystemExit("set DISCORD_BOT_TOKEN (or run it in a terminal for the setup wizard)")
     if not GUILD_ID:
-        raise SystemExit("set DISCORD_GUILD_ID")
+        raise SystemExit("set DISCORD_GUILD_ID (or run it in a terminal for the setup wizard)")
 
     if args.setup:
+        checks, can_write, _ = preflight()
+        print_checks(checks)
+        if not can_write:
+            raise SystemExit("cannot create channels until the issues above are fixed")
         return setup_discord()
 
     if not args.sample and not WDGO_KEY:
@@ -564,6 +672,14 @@ def main() -> int:
     if args.once:
         tick(state, sample=args.sample)
         return 0
+
+    # Continuous mode: validate once up front so a misconfig fails loudly at
+    # startup instead of looping silently.
+    if not args.sample:
+        checks, can_write, key_ok = preflight()
+        print_checks(checks)
+        if not can_write or key_ok is False:
+            raise SystemExit("fix the config issues above and restart")
     log.info("live-stats channels starting (interval=%ss)", INTERVAL)
     while True:
         try:

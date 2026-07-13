@@ -14,6 +14,9 @@ Two ready-to-run displays plus the docs to build your own:
 
 Everything is standard-library only. Fork it, change your config, run it.
 
+**New here?** [GETTING-STARTED.md](GETTING-STARTED.md) is a full zero-to-running
+walkthrough. The short version is below.
+
 ## Option A: live voice-channel display
 
 The sidebar dashboard. A bot renames voice channels in a "live stats" category
@@ -41,26 +44,30 @@ Only a human can do this part; everything after is one command.
 
 ### Step 2: configure
 
-Copy `.env.example` to `.env` and fill in the three values (this is the easy way,
-no shell knowledge needed):
+**Easiest: let it prompt you.** With nothing configured yet, running `--setup`
+(next step) asks for your key, bot token, and server id (secrets are typed
+hidden), writes a local `.env` for you, and continues. No file editing.
 
+**Or fill it in yourself:**
 ```sh
 cp .env.example .env
 # then edit .env: WDGWARS_API_KEY, DISCORD_BOT_TOKEN, DISCORD_GUILD_ID
 ```
+`.env` is gitignored, so your secrets stay local. (You can also `export` the
+three variables instead of using a file.)
 
-`.env` is gitignored, so your secrets stay local. (If you prefer, you can
-`export` the three variables instead of using a file.)
-
-### Step 3: build it
+### Step 3: check + build
 
 ```sh
-python live_stats_channels.py --setup
+python live_stats_channels.py --check   # validate token / server / permissions / key, no changes
+python live_stats_channels.py --setup   # create category + #stats-config + panel, then populate
 ```
 
-This creates the `📊 │ live stats` category, a `#stats-config` mod channel with a
-pinned control panel, and (if your key is set) populates the stat channels
-immediately. Safe to re-run.
+`--check` tells you exactly what is wrong if something is off (bad token, bot not
+invited, missing Manage Channels, bad key) with the fix for each. `--setup`
+creates the `📊 │ live stats` category, a `#stats-config` mod channel with a
+pinned control panel, and (if your key is set) populates the stat channels. Both
+are safe to re-run.
 
 ### Step 4: keep it updating
 
