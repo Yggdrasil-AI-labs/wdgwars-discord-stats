@@ -423,16 +423,24 @@ def poll_reactions(cfg: dict) -> bool:
     ch, msg = panel.get("channel_id"), panel.get("message_id")
     if not (ch and msg):
         return False
+    # One read per tick: pull the message and look at reaction counts. The bot's
+    # own button counts as 1; a user press makes it >= 2. Only then do we spend
+    # calls fetching who reacted. Keeps steady-state API traffic to ~1 call/tick.
+    message = discord_api("GET", f"/channels/{ch}/messages/{msg}")
+    if not isinstance(message, dict):
+        return False
+    counts = {r.get("emoji", {}).get("name"): r.get("count", 0)
+              for r in message.get("reactions", [])}
     me_id = bot_id()
     changed = False
     for label, emoji in REACTION_EMOJI.items():
+        if counts.get(emoji, 0) < 2:
+            continue
         enc = urllib.parse.quote(emoji)
         users = discord_api(
             "GET", f"/channels/{ch}/messages/{msg}/reactions/{enc}?limit=20")
-        if not isinstance(users, list):
-            continue
-        pressers = [u for u in users
-                    if isinstance(u, dict) and u.get("id") != me_id]
+        pressers = ([u for u in users if isinstance(u, dict) and u.get("id") != me_id]
+                    if isinstance(users, list) else [])
         if not pressers:
             continue
         cfg.setdefault("fields", {})[label] = not field_enabled(cfg, label)
