@@ -1,0 +1,32 @@
+name: live-stats
+
+# Keep the display updating without an always-on machine. GitHub runs this on a
+# schedule using the secrets you set under Settings -> Secrets and variables ->
+# Actions. Run `--setup` once locally first (to create the category + channels);
+# after that, this keeps them updated.
+#
+# Note: the schedule is best-effort and may lag a few minutes. Because each run
+# is a fresh machine, the interactive #stats-config toggles do not persist here,
+# set field visibility with the STATS_FIELDS_OFF variable below (comma-separated
+# labels) or run the poller on a persistent host if you want the live panel.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Update the live-stats channels
+        env:
+          WDGWARS_API_KEY: ${{ secrets.WDGWARS_API_KEY }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          STATS_CATEGORY_NAME: ${{ vars.STATS_CATEGORY_NAME || '📊 │ live stats' }}
+        run: python live_stats_channels.py --once

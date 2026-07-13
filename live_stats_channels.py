@@ -64,6 +64,28 @@ try:
 except Exception:
     TZ = timezone.utc
 
+
+def _load_dotenv() -> None:
+    """Populate the environment from a .env file so users can fill in a text
+    file instead of running `export` commands. Does not override variables that
+    are already set (real env wins). Looks at $STATS_ENV_FILE, else a .env next
+    to this script."""
+    path = os.environ.get("STATS_ENV_FILE") or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), ".env")
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+    except FileNotFoundError:
+        pass
+
+
+_load_dotenv()
+
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
 WDGO_KEY = os.environ.get("WDGWARS_API_KEY", "").strip()
 GUILD_ID = os.environ.get("DISCORD_GUILD_ID", "").strip()
@@ -90,6 +112,12 @@ FIELD_ALIASES = {
 }
 ACK_EMOJI = "%E2%9C%85"  # URL-encoded check-mark for reaction acks
 PULSE_CYCLE = ["·", ":", ".", "'"]  # visible proof a tick fired
+# Fields to hide via environment (comma-separated labels/aliases). Useful where
+# the config file does not persist, e.g. GitHub Actions.
+_ENV_FIELDS_OFF = {
+    FIELD_ALIASES.get(tok.strip().lower(), tok.strip())
+    for tok in os.environ.get("STATS_FIELDS_OFF", "").split(",") if tok.strip()
+}
 
 # Canned stats for --sample (no key, no network).
 SAMPLE_ME = {
@@ -143,6 +171,8 @@ def load_config() -> dict:
 
 
 def field_enabled(cfg: dict, label: str) -> bool:
+    if label in _ENV_FIELDS_OFF:
+        return False
     return bool(cfg.get("fields", {}).get(label, True))
 
 
@@ -428,12 +458,19 @@ def setup_discord() -> int:
         cfg["panel"] = {"channel_id": modch["id"], "message_id": panel["id"]}
     save_json(CONFIG_PATH, cfg)
 
+    if WDGO_KEY:
+        print("populating stat channels...")
+        tick(load_json(STATE_PATH, {"tick": 0}), sample=False)
+        print("done.")
+    else:
+        print("set WDGWARS_API_KEY and run `--once` to populate the stat channels.")
+
     print()
     print(f"Setup complete. Config written to {CONFIG_PATH}.")
-    print("Create the stat channels and start updating:")
-    print("  python live_stats_channels.py --once   # one update")
-    print("  python live_stats_channels.py           # loop (default 5 min)")
-    print(f"Manage which fields show from the #{cfg_name} channel "
+    print("Keep it updating with any of:")
+    print("  python live_stats_channels.py            # run continuously (5-min loop)")
+    print("  the systemd unit, or the GitHub Actions workflow (see the README)")
+    print(f"Change which fields show from the #{cfg_name} channel "
           "(show/hide/list), or edit the config file.")
     return 0
 

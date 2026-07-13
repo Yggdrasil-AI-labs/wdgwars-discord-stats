@@ -22,48 +22,77 @@ which fields appear, and can toggle them from a mod channel. `setup` builds the
 category, the mod channel, and the control panel for you, no manual channel
 creation.
 
-**1. Make a bot.** In the [Discord Developer Portal](https://discord.com/developers/applications):
-create an application, add a Bot, copy its token, and invite it to your server
-with the **Manage Channels** permission.
+### Step 1: make a Discord bot
 
-**2. Configure** (never hard-code the token or key):
+Only a human can do this part; everything after is one command.
+
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications) and click **New Application**. Name it anything.
+2. Left sidebar → **Bot** → **Reset Token** → **Copy**. That is your `DISCORD_BOT_TOKEN`.
+3. Invite the bot to your server. Paste this URL in your browser, replacing
+   `YOUR_CLIENT_ID` with the **Application ID** from the **General Information**
+   page (`permissions=16` is "Manage Channels", the only permission it needs):
+
+   ```
+   https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&scope=bot&permissions=16
+   ```
+   Pick your server and authorize.
+4. Get your server id: Discord → Settings → Advanced → turn on **Developer Mode**,
+   then right-click your server icon → **Copy Server ID**.
+
+### Step 2: configure
+
+Copy `.env.example` to `.env` and fill in the three values (this is the easy way,
+no shell knowledge needed):
 
 ```sh
-export WDGWARS_API_KEY="your-64-char-key"     # wdgwars.pl/profile
-export DISCORD_BOT_TOKEN="your-bot-token"
-export DISCORD_GUILD_ID="your-server-id"       # right-click your server -> Copy Server ID
+cp .env.example .env
+# then edit .env: WDGWARS_API_KEY, DISCORD_BOT_TOKEN, DISCORD_GUILD_ID
 ```
 
-**3. Bootstrap the Discord side** (creates the category, a `#stats-config` mod
-channel, and a pinned control panel; safe to re-run):
+`.env` is gitignored, so your secrets stay local. (If you prefer, you can
+`export` the three variables instead of using a file.)
+
+### Step 3: build it
 
 ```sh
 python live_stats_channels.py --setup
 ```
 
-**4. Run it:**
+This creates the `📊 │ live stats` category, a `#stats-config` mod channel with a
+pinned control panel, and (if your key is set) populates the stat channels
+immediately. Safe to re-run.
+
+### Step 4: keep it updating
+
+Pick whichever fits, no always-on machine required for the last one:
 
 ```sh
-python live_stats_channels.py --sample --dry-run   # preview fields, no key, no writes
-python live_stats_channels.py --once               # one real update (creates the stat channels)
-python live_stats_channels.py                        # loop (default every 5 min)
+python live_stats_channels.py            # run continuously on a box you control (5-min loop)
 ```
 
-To run it continuously, install the service (see [`systemd/`](systemd/)):
+- **systemd** (a server/Pi you own): copy `systemd/env.example` to
+  `~/.config/wdgwars-discord-stats/env` (fill in, `chmod 600`), copy
+  `systemd/wdgwars-live-stats.service` to `~/.config/systemd/user/`, then
+  `systemctl --user enable --now wdgwars-live-stats.service`.
+- **GitHub Actions** (no machine at all): fork/clone this repo, add
+  `WDGWARS_API_KEY`, `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID` under
+  **Settings → Secrets and variables → Actions**, and the included
+  [`.github/workflows/live-stats.yml`](.github/workflows/live-stats.yml) updates
+  the display every ~10 minutes on GitHub's runners. Run `--setup` once locally
+  first to create the channels.
 
-```sh
-mkdir -p ~/.config/wdgwars-discord-stats
-cp systemd/env.example ~/.config/wdgwars-discord-stats/env   # fill in + chmod 600
-cp systemd/wdgwars-live-stats.service ~/.config/systemd/user/
-systemctl --user enable --now wdgwars-live-stats.service
-```
+### Choosing what to show
 
-**Choosing what to show.** Not everyone wants every number public. After `setup`,
-go to the `#stats-config` channel and type `hide ble`, `show rank`, `hide all`,
-`show all`, or `list`. The poller applies the change, reacts with a check, edits
-the pinned panel, and adds/removes the matching voice channel. Or edit the config
-file directly (`~/.wdgwars-live-stats.json`, e.g. `{"fields": {"BLE": false}}`;
-a field missing from the map is shown).
+Not everyone wants every number public. Three ways:
+
+- **From Discord:** in `#stats-config`, type `hide ble`, `show rank`, `hide all`,
+  `show all`, or `list`. The poller applies it, reacts with a check, edits the
+  pinned panel, and adds/removes the matching channel. (Takes up to one tick,
+  ~5 min, to reflect.)
+- **Config file:** edit `~/.wdgwars-live-stats.json`, e.g. `{"fields": {"BLE": false}}`
+  (a field missing from the map is shown).
+- **Environment** (works even where the config file does not persist, e.g.
+  GitHub Actions): set `STATS_FIELDS_OFF=BLE,Rank`.
 
 ## Option B: webhook post
 
