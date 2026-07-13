@@ -64,11 +64,15 @@ immediately. Safe to re-run.
 
 ### Step 4: keep it updating
 
-Pick whichever fits, no always-on machine required for the last one:
+The tool is a plain Python script with no GitHub dependency, run it however you
+like. Three options, pick one:
 
 ```sh
-python live_stats_channels.py            # run continuously on a box you control (5-min loop)
+python live_stats_channels.py            # simplest: run it on any machine you control (5-min loop)
 ```
+
+- **Your own cron / Task Scheduler:** schedule `python live_stats_channels.py --once`
+  at whatever interval you want. No service, no loop process.
 
 - **systemd** (a server/Pi you own): copy `systemd/env.example` to
   `~/.config/wdgwars-discord-stats/env` (fill in, `chmod 600`), copy
