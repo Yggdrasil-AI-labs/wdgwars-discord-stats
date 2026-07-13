@@ -1,0 +1,16 @@
+[Unit]
+Description=WDGoWars live-stats Discord display
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Secrets live in this file (see env.example). chmod 600 it. Never commit it.
+EnvironmentFile=%h/.config/wdgwars-discord-stats/env
+# Adjust the path if you cloned the repo somewhere else.
+ExecStart=/usr/bin/python3 %h/wdgwars-discord-stats/live_stats_channels.py
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
