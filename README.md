@@ -94,12 +94,14 @@ python live_stats_channels.py            # simplest: run it on any machine you c
 
 ### Choosing what to show
 
-Not everyone wants every number public. Three ways:
+Not everyone wants every number public. Easiest first:
 
-- **From Discord:** in `#stats-config`, type `hide ble`, `show rank`, `hide all`,
-  `show all`, or `list`. The poller applies it, reacts with a check, edits the
-  pinned panel, and adds/removes the matching channel. (Takes up to one tick,
-  ~5 min, to reflect.)
+- **React on the panel (no typing):** the pinned panel in `#stats-config` has one
+  emoji per field. Click a field's emoji to toggle it on/off. The poller applies
+  it, clears your reaction (so it acts like a button), updates the panel, and
+  adds/removes the matching channel. (Takes up to one tick, ~5 min, to reflect.)
+- **Type a command:** in the same channel, `hide ble`, `show rank`, `hide all`,
+  `show all`, or `list` also work.
 - **Config file:** edit `~/.wdgwars-live-stats.json`, e.g. `{"fields": {"BLE": false}}`
   (a field missing from the map is shown).
 - **Environment** (works even where the config file does not persist, e.g.

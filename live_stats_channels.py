@@ -55,6 +55,7 @@ import os
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
@@ -127,6 +128,24 @@ SAMPLE_ME = {
 }
 
 log = logging.getLogger("live-stats")
+
+# One reaction "button" emoji per field (single-codepoint so it encodes cleanly
+# for the Discord reactions API). Reacting on the config panel toggles the field.
+REACTION_EMOJI = {
+    "User": "👤", "Team": "🏴", "Updated": "🕒", "Total": "📊", "WiFi": "📶",
+    "BLE": "🔵", "ADS-B": "🛫", "Mesh": "📡", "Rank": "🎯", "API": "🔌",
+}
+_BOT_ID = None
+
+
+def bot_id() -> str:
+    """The bot's own user id (cached) so its panel reactions can be told apart
+    from a user's toggle press."""
+    global _BOT_ID
+    if _BOT_ID is None:
+        me = discord_api("GET", "/users/@me")
+        _BOT_ID = me.get("id", "") if isinstance(me, dict) else ""
+    return _BOT_ID
 
 
 # ── small helpers ──────────────────────────────────────────────────────────
@@ -201,10 +220,14 @@ def apply_command(cfg: dict, text: str):
 
 
 def render_panel_text(cfg: dict) -> str:
-    lines = ["**live-stats fields** (`show <field>` / `hide <field>` / "
-             "`show all` / `hide all`):"]
+    lines = ["**live-stats fields** — react with a field's emoji below to "
+             "show/hide it:", ""]
     for lbl in FIELD_ORDER:
-        lines.append(f"{'✅' if field_enabled(cfg, lbl) else '⬜'} {lbl}")
+        state = "✅ shown " if field_enabled(cfg, lbl) else "⬜ hidden"
+        lines.append(f"{REACTION_EMOJI.get(lbl, '•')}  {state}  {lbl}")
+    lines.append("")
+    lines.append("_(or type `show <field>` / `hide <field>` / `show all` / "
+                 "`hide all` / `list`)_")
     return "\n".join(lines)
 
 
@@ -382,6 +405,47 @@ def update_panel(cfg: dict) -> None:
         discord_api("PUT", f"/channels/{ch}/pins/{new['id']}")
         cfg.setdefault("panel", {})["message_id"] = new["id"]
         save_json(CONFIG_PATH, cfg)
+        add_panel_reactions(ch, new["id"])
+
+
+def add_panel_reactions(channel_id: str, message_id: str) -> None:
+    """Put one clickable reaction per field on the panel message (idempotent)."""
+    for emoji in REACTION_EMOJI.values():
+        enc = urllib.parse.quote(emoji)
+        discord_api("PUT",
+                    f"/channels/{channel_id}/messages/{message_id}/reactions/{enc}/@me")
+
+
+def poll_reactions(cfg: dict) -> bool:
+    """Toggle any field whose reaction a user pressed on the panel, then clear
+    that reaction so it acts like a button. Returns True if the config changed."""
+    panel = cfg.get("panel") or {}
+    ch, msg = panel.get("channel_id"), panel.get("message_id")
+    if not (ch and msg):
+        return False
+    me_id = bot_id()
+    changed = False
+    for label, emoji in REACTION_EMOJI.items():
+        enc = urllib.parse.quote(emoji)
+        users = discord_api(
+            "GET", f"/channels/{ch}/messages/{msg}/reactions/{enc}?limit=20")
+        if not isinstance(users, list):
+            continue
+        pressers = [u for u in users
+                    if isinstance(u, dict) and u.get("id") != me_id]
+        if not pressers:
+            continue
+        cfg.setdefault("fields", {})[label] = not field_enabled(cfg, label)
+        changed = True
+        log.info("toggled %r -> %s via reaction", label, cfg["fields"][label])
+        for u in pressers:
+            discord_api(
+                "DELETE",
+                f"/channels/{ch}/messages/{msg}/reactions/{enc}/{u['id']}")
+    if changed:
+        save_json(CONFIG_PATH, cfg)
+        update_panel(cfg)
+    return changed
 
 
 def poll_commands(cfg: dict, state: dict) -> bool:
@@ -451,11 +515,17 @@ def setup_discord() -> int:
 
     cfg = load_config()
     cfg["config_channel_id"] = modch["id"]
-    panel = discord_api("POST", f"/channels/{modch['id']}/messages",
-                        {"content": render_panel_text(cfg)})
-    if panel:
-        discord_api("PUT", f"/channels/{modch['id']}/pins/{panel['id']}")
-        cfg["panel"] = {"channel_id": modch["id"], "message_id": panel["id"]}
+    body = {"content": render_panel_text(cfg)}
+    existing = cfg.get("panel") or {}
+    pid = existing.get("message_id") if existing.get("channel_id") == modch["id"] else None
+    if pid and discord_api("PATCH", f"/channels/{modch['id']}/messages/{pid}", body) is not None:
+        add_panel_reactions(modch["id"], pid)  # reuse existing panel
+    else:
+        panel = discord_api("POST", f"/channels/{modch['id']}/messages", body)
+        if panel:
+            discord_api("PUT", f"/channels/{modch['id']}/pins/{panel['id']}")
+            cfg["panel"] = {"channel_id": modch["id"], "message_id": panel["id"]}
+            add_panel_reactions(modch["id"], panel["id"])
     save_json(CONFIG_PATH, cfg)
 
     if WDGO_KEY:
@@ -479,6 +549,7 @@ def setup_discord() -> int:
 def tick(state: dict, sample: bool = False) -> None:
     cfg = load_config()
     poll_commands(cfg, state)
+    poll_reactions(cfg)
 
     t = state.get("tick", 0)
     pulse = PULSE_CYCLE[t % len(PULSE_CYCLE)]

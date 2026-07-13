@@ -64,8 +64,10 @@ python live_stats_channels.py --once     # one update; schedule with your own cr
   updates it every ~10 min. Run `--setup` once locally first.
 
 ## Step 6: choose what to show
-- **In Discord:** in `#stats-config`, type `hide ble`, `show rank`, `hide all`,
-  `show all`, or `list`. Applies on the next tick (~5 min).
+- **React on the panel (easiest):** the pinned panel in `#stats-config` has an
+  emoji per field, click one to toggle that field on/off. Applies on the next
+  tick (~5 min).
+- **Type a command:** `hide ble`, `show rank`, `hide all`, `show all`, `list`.
 - **Config file:** `~/.wdgwars-live-stats.json`, e.g. `{"fields": {"BLE": false}}`.
 - **Env var** (for GitHub Actions): `STATS_FIELDS_OFF=BLE,Rank`.
 
