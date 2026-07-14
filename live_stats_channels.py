@@ -95,6 +95,10 @@ CATEGORY_NAME = os.environ.get("STATS_CATEGORY_NAME", "📊 │ live stats")
 CONFIG_PATH = os.path.expanduser(
     os.environ.get("STATS_CONFIG_PATH", "~/.wdgwars-live-stats.json"))
 CONFIG_CHANNEL_ID = os.environ.get("STATS_CONFIG_CHANNEL_ID", "").strip()
+# The mod-config channel is an admin surface, so setup hides it from regular
+# members by default. Set STATS_CONFIG_PRIVATE=off to make it visible to all.
+CONFIG_PRIVATE = os.environ.get("STATS_CONFIG_PRIVATE", "on").lower() not in (
+    "0", "off", "false", "no")
 STATE_PATH = os.path.expanduser(
     os.environ.get("STATS_STATE_PATH", "~/.wdgwars-live-stats-state.json"))
 BASE = os.environ.get("WDGWARS_BASE_URL", "https://wdgwars.pl").rstrip("/")
@@ -146,6 +150,21 @@ def bot_id() -> str:
         me = discord_api("GET", "/users/@me")
         _BOT_ID = me.get("id", "") if isinstance(me, dict) else ""
     return _BOT_ID
+
+
+def config_overwrites():
+    """Permission overwrites that hide the mod channel from @everyone while
+    letting the bot view/post/manage it. None if privacy is disabled. (Server
+    admins still see it, Discord's Administrator permission bypasses overwrites.)"""
+    if not CONFIG_PRIVATE:
+        return None
+    view = 1 << 10  # VIEW_CHANNEL
+    # view + send + add_reactions + manage_messages + read_history
+    bot_allow = (1 << 10) | (1 << 11) | (1 << 6) | (1 << 13) | (1 << 16)
+    return [
+        {"id": GUILD_ID, "type": 0, "deny": str(view), "allow": "0"},
+        {"id": bot_id(), "type": 1, "allow": str(bot_allow), "deny": "0"},
+    ]
 
 
 # ── small helpers ──────────────────────────────────────────────────────────
@@ -508,18 +527,26 @@ def setup_discord() -> int:
         print(f"created category: {CATEGORY_NAME} ({cat['id']})")
 
     cfg_name = os.environ.get("STATS_CONFIG_CHANNEL_NAME", "stats-config")
+    ow = config_overwrites()
     modch = next((c for c in chs if c["type"] == 0 and c["name"] == cfg_name), None)
     if modch:
         print(f"mod-config channel exists: #{cfg_name} ({modch['id']})")
+        if ow is not None:
+            discord_api("PATCH", f"/channels/{modch['id']}", {"permission_overwrites": ow})
+            print("  set private (hidden from regular members)")
     else:
-        modch = discord_api("POST", f"/guilds/{GUILD_ID}/channels", {
+        payload = {
             "name": cfg_name, "type": 0, "parent_id": cat["id"],
-            "topic": "Control which live-stats fields show. Commands: "
-                     "show <field> / hide <field> / show all / hide all / list",
-        })
+            "topic": "Control which live-stats fields show. React with a field's "
+                     "emoji below, or type show/hide/list.",
+        }
+        if ow is not None:
+            payload["permission_overwrites"] = ow
+        modch = discord_api("POST", f"/guilds/{GUILD_ID}/channels", payload)
         if not modch:
             raise SystemExit("failed to create the mod-config channel")
-        print(f"created mod-config channel: #{cfg_name} ({modch['id']})")
+        vis = "hidden from members" if ow is not None else "visible to all"
+        print(f"created mod-config channel: #{cfg_name} ({modch['id']}) [{vis}]")
 
     cfg = load_config()
     cfg["config_channel_id"] = modch["id"]

@@ -69,6 +69,12 @@ creates the `📊 │ live stats` category, a `#stats-config` mod channel with a
 pinned control panel, and (if your key is set) populates the stat channels. Both
 are safe to re-run.
 
+The `#stats-config` channel is created **private** by default (hidden from
+regular members; server admins still see it, and you toggle from it). Set
+`STATS_CONFIG_PRIVATE=off` if you want it visible to everyone. Deleting it
+entirely is fine too, the display keeps working and you configure via the config
+file or `STATS_FIELDS_OFF`.
+
 ### Step 4: keep it updating
 
 The tool is a plain Python script with no GitHub dependency, run it however you
