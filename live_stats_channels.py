@@ -31,15 +31,14 @@ Setup
 
 Choosing what to show
 ---------------------
-Not everyone wants to expose every number. Two ways to control which fields
-appear:
+Not everyone wants to expose every number. Control which fields appear by:
 
-- Edit the config file (default ~/.wdgwars-live-stats.json):
+- Reacting on the pinned panel in the mod-config channel: a field's emoji
+  toggles it on/off (easiest, once `--setup` has run).
+- Editing the config file (default ~/.wdgwars-live-stats.json):
   {"fields": {"BLE": false, "Rank": false}}  (missing = shown)
-- Or set STATS_CONFIG_CHANNEL_ID to a mod-only text channel and type commands
-  there: `hide ble`, `show rank`, `hide all`, `show all`, `list`. The poller
-  reads that channel each tick, applies the change, reacts with a check, and
-  keeps a live panel of the current on/off state.
+- Or, where the config file does not persist (e.g. GitHub Actions), the env
+  var STATS_FIELDS_OFF=BLE,Rank.
 
 Key safety
 ----------
@@ -94,7 +93,6 @@ OWNER_USERNAME = os.environ.get("STATS_OWNER_USERNAME", "").strip()
 CATEGORY_NAME = os.environ.get("STATS_CATEGORY_NAME", "📊 │ live stats")
 CONFIG_PATH = os.path.expanduser(
     os.environ.get("STATS_CONFIG_PATH", "~/.wdgwars-live-stats.json"))
-CONFIG_CHANNEL_ID = os.environ.get("STATS_CONFIG_CHANNEL_ID", "").strip()
 # The mod-config channel is an admin surface, so setup hides it from regular
 # members by default. Set STATS_CONFIG_PRIVATE=off to make it visible to all.
 CONFIG_PRIVATE = os.environ.get("STATS_CONFIG_PRIVATE", "on").lower() not in (
@@ -117,7 +115,6 @@ FIELD_ALIASES = {
     "gangsize": "Gang Size", "members": "Gang Size", "size": "Gang Size",
     "gangaps": "Gang APs", "gangtotal": "Gang APs", "aps": "Gang APs",
 }
-ACK_EMOJI = "%E2%9C%85"  # URL-encoded check-mark for reaction acks
 PULSE_CYCLE = ["·", ":", ".", "'"]  # visible proof a tick fired
 # Fields to hide via environment (comma-separated labels/aliases). Useful where
 # the config file does not persist, e.g. GitHub Actions.
@@ -217,30 +214,7 @@ def field_enabled(cfg: dict, label: str) -> bool:
     return bool(cfg.get("fields", {}).get(label, True))
 
 
-# ── mod-channel commands ─────────────────────────────────────────────────────
-def apply_command(cfg: dict, text: str):
-    """Parse one command. Returns (handled, reply_text_or_None)."""
-    parts = text.strip().lower().split()
-    if not parts:
-        return False, None
-    cmd = parts[0]
-    if cmd == "list":
-        return True, render_panel_text(cfg)
-    if cmd in ("show", "hide") and len(parts) >= 2:
-        want = cmd == "show"
-        target = parts[1]
-        if target == "all":
-            for lbl in FIELD_ORDER:
-                cfg["fields"][lbl] = want
-            return True, ("showing all fields" if want else "hiding all fields")
-        lbl = FIELD_ALIASES.get(target)
-        if not lbl:
-            return True, f"unknown field {target!r}. valid: {', '.join(FIELD_ORDER)}"
-        cfg["fields"][lbl] = want
-        return True, f"{'showing' if want else 'hiding'}: {lbl}"
-    return False, None
-
-
+# ── config panel ─────────────────────────────────────────────────────────────
 def render_panel_text(cfg: dict) -> str:
     lines = ["**live-stats fields** — react with a field's emoji below to "
              "show/hide it:", ""]
@@ -248,8 +222,7 @@ def render_panel_text(cfg: dict) -> str:
         state = "✅ shown " if field_enabled(cfg, lbl) else "⬜ hidden"
         lines.append(f"{REACTION_EMOJI.get(lbl, '•')}  {state}  {lbl}")
     lines.append("")
-    lines.append("_(or type `show <field>` / `hide <field>` / `show all` / "
-                 "`hide all` / `list`)_")
+    lines.append("_(one press toggles a field; your reaction clears once applied)_")
     return "\n".join(lines)
 
 
@@ -421,12 +394,6 @@ def reconcile_channels(active):
     return present
 
 
-def resolve_config_channel(cfg: dict) -> str:
-    """Mod-config channel id, from the env var or (preferred) the config file
-    written by `--setup`."""
-    return CONFIG_CHANNEL_ID or str(cfg.get("config_channel_id") or "")
-
-
 def update_panel(cfg: dict) -> None:
     """Edit the pinned control panel to reflect the current field state. Reposts
     and re-pins if the stored message was deleted. No-op if setup never ran."""
@@ -493,38 +460,6 @@ def poll_reactions(cfg: dict) -> bool:
     return changed
 
 
-def poll_commands(cfg: dict, state: dict) -> bool:
-    """Read the mod-config channel for show/hide/list commands. Applies them,
-    acks with a reaction, refreshes the pinned panel. Returns True if the
-    config changed."""
-    chan = resolve_config_channel(cfg)
-    if not chan:
-        return False
-    msgs = discord_api("GET", f"/channels/{chan}/messages?limit=15")
-    if not isinstance(msgs, list):
-        return False
-    seen = set(state.get("processed_cmd_ids", []))
-    changed = False
-    for m in reversed(msgs):  # oldest first
-        mid = m.get("id")
-        content = m.get("content", "")
-        if not mid or mid in seen or not content:
-            continue
-        handled, reply = apply_command(cfg, content)
-        if handled:
-            changed = True
-            discord_api("PUT",
-                        f"/channels/{chan}/messages/{mid}/reactions/{ACK_EMOJI}/@me")
-            if reply:
-                discord_api("POST", f"/channels/{chan}/messages", {"content": reply})
-        seen.add(mid)
-    state["processed_cmd_ids"] = list(seen)[-200:]
-    if changed:
-        save_json(CONFIG_PATH, cfg)
-        update_panel(cfg)
-    return changed
-
-
 def setup_discord() -> int:
     """Create the live-stats category, a mod-config text channel, and a pinned
     control panel. Idempotent: reuses an existing category/channel by name. The
@@ -556,7 +491,7 @@ def setup_discord() -> int:
         payload = {
             "name": cfg_name, "type": 0, "parent_id": cat["id"],
             "topic": "Control which live-stats fields show. React with a field's "
-                     "emoji below, or type show/hide/list.",
+                     "emoji below to toggle it.",
         }
         if ow is not None:
             payload["permission_overwrites"] = ow
@@ -567,7 +502,6 @@ def setup_discord() -> int:
         print(f"created mod-config channel: #{cfg_name} ({modch['id']}) [{vis}]")
 
     cfg = load_config()
-    cfg["config_channel_id"] = modch["id"]
     body = {"content": render_panel_text(cfg)}
     existing = cfg.get("panel") or {}
     pid = existing.get("message_id") if existing.get("channel_id") == modch["id"] else None
@@ -593,15 +527,14 @@ def setup_discord() -> int:
     print("Keep it updating with any of:")
     print("  python live_stats_channels.py            # run continuously (5-min loop)")
     print("  the systemd unit, or the GitHub Actions workflow (see the README)")
-    print(f"Change which fields show from the #{cfg_name} channel "
-          "(show/hide/list), or edit the config file.")
+    print(f"Change which fields show by reacting on the panel in #{cfg_name}, "
+          "or edit the config file.")
     return 0
 
 
 # ── tick ─────────────────────────────────────────────────────────────────────
 def tick(state: dict, sample: bool = False) -> None:
     cfg = load_config()
-    poll_commands(cfg, state)
     poll_reactions(cfg)
 
     t = state.get("tick", 0)
@@ -762,6 +695,9 @@ def main() -> int:
     logging.basicConfig(
         level=os.environ.get("STATS_LOG_LEVEL", "INFO"),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+    if args.sample and not (args.once or args.dry_run):
+        raise SystemExit("--sample only makes sense with --once or --dry-run")
 
     if args.dry_run:
         return dry_run(args.sample)

@@ -71,8 +71,8 @@ config file or `STATS_FIELDS_OFF`. Or never create it: `STATS_CONFIG_PRIVATE`
 controls visibility; deleting the channel after setup is fine.
 
 ### How do I hide/show fields?
-React to a field's emoji on the pinned panel in `#stats-config` (easiest), type
-`hide ble` / `show rank`, edit `~/.wdgwars-live-stats.json`, or set
+React to a field's emoji on the pinned panel in `#stats-config`, edit
+`~/.wdgwars-live-stats.json` (`{"fields": {"BLE": false}}`), or set
 `STATS_FIELDS_OFF=BLE,Rank`. Changes apply on the next tick (~5 min).
 
 ### How often does it update? Can I change that?
