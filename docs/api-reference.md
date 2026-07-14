@@ -209,6 +209,7 @@ withheld:
 | Per-cell, per-team AP breakdown | Deliberately withheld as an anti-cheat measure. Do not re-request it. |
 | Full badge catalog | No public enumeration endpoint (only your earned `badges`). |
 | Per-AP effective hardening | Not known to be exposed on any read endpoint. Do not assume a field for it. |
+| Per-device / per-hardware upload split | Not exposed. Stats are per-account; `/api/me` has no per-device breakdown, though keys carry a `device_name`. Would need a new LOCOSP surface (e.g. a `devices` array on `/api/me`: `[{device_name, wifi, ble, aircraft, mesh, total}]`). Requested; not shipped. |
 | Gang **roster** / per-member stats | Intended for `/api/team/me`, but that endpoint is not reliably served (see section 3). Gang **rank, size, and total APs** *are* available, from the `gangs` array on `/api/leaderboard` (see note below). |
 
 Note: your own rank and your recent captures *are* exposed now (`your_rank` and

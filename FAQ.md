@@ -51,6 +51,15 @@ APs**, pulled from the leaderboard. (The per-member roster isn't available,
 `/api/team/me` isn't reliably served, so member-by-member breakdown isn't
 possible right now.) Solo drivers don't get gang channels at all.
 
+### Can it show per-device / per-hardware uploads (how much each rig contributed)?
+Not yet. WDGoWars aggregates stats per *account*, `/api/me` returns your combined
+totals with no per-device split, so the tool has nothing to break out. The data
+likely exists server-side (every API key carries a `device_name`), so it needs
+LOCOSP to expose a per-device breakdown (e.g. a `devices` array on `/api/me`).
+It's been requested. Once an endpoint exists, adding per-device channels is a
+small change. The only workaround today is one API key per device, which is
+per-key rather than per-hardware and doesn't scale to a gang.
+
 ### I already have a "live stats" style category.
 Point the tool at a different name with `STATS_CATEGORY_NAME="📊 │ my stats"` so
 it doesn't touch your existing one.
