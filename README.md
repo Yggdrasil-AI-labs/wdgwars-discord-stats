@@ -15,7 +15,8 @@ Two ready-to-run displays plus the docs to build your own:
 Everything is standard-library only. Fork it, change your config, run it.
 
 **New here?** [GETTING-STARTED.md](GETTING-STARTED.md) is a full zero-to-running
-walkthrough. The short version is below.
+walkthrough, and [FAQ.md](FAQ.md) covers common situations (reusing an existing
+bot, Windows, no server, gang stats, and more). The short version is below.
 
 ## Option A: live voice-channel display
 

@@ -114,6 +114,12 @@ beyond that. Use the leaderboard arrays for the standings themselves and for gan
 rank (match your gang name in the `gangs` array). Show `>{top_n}` for anyone
 outside the cached window.
 
+The `gangs` array is the practical source of **gang stats** (since `/api/team/me`
+is unreliable). Each entry: `{gang_id, name, member_count, ap_count}`, and the
+array is ranked, so the position of your gang is its rank. That yields gang rank,
+member count, and total APs without the broken team endpoint. Per-driver rows are
+`{user_id, username, wifi, ble, aircraft, mesh, total, is_patron}`.
+
 ### `GET /api/me/aps?since=<ISO8601>`: your upload volume in a window
 
 Returns `{count}`, the number of APs credited to you since the given timestamp.
@@ -203,7 +209,7 @@ withheld:
 | Per-cell, per-team AP breakdown | Deliberately withheld as an anti-cheat measure. Do not re-request it. |
 | Full badge catalog | No public enumeration endpoint (only your earned `badges`). |
 | Per-AP effective hardening | Not known to be exposed on any read endpoint. Do not assume a field for it. |
-| Gang roster / per-member stats | Intended for `/api/team/me`, but that endpoint is not reliably served (see section 3). |
+| Gang **roster** / per-member stats | Intended for `/api/team/me`, but that endpoint is not reliably served (see section 3). Gang **rank, size, and total APs** *are* available, from the `gangs` array on `/api/leaderboard` (see note below). |
 
 Note: your own rank and your recent captures *are* exposed now (`your_rank` and
 `recent_captures` on `/api/me`, both shipped 2026-06-03). Earlier drafts of this
