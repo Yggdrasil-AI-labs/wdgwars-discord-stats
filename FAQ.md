@@ -48,10 +48,11 @@ The owner of the API key you configure, one key = one account. It is not a
 whole-server or multi-account aggregate.
 
 ### Can it show my gang's stats?
-Yes, if you're in a gang: it shows your **gang rank, gang size, and gang total
-APs**, pulled from the leaderboard. (The per-member roster isn't available,
-`/api/team/me` isn't reliably served, so member-by-member breakdown isn't
-possible right now.) Solo drivers don't get gang channels at all.
+Yes, if you're in a gang: it currently shows your **gang rank, gang size, and
+gang total APs**, pulled from the leaderboard. Solo drivers don't get gang
+channels at all. A richer **per-member breakdown is possible** too, `/api/team/me`
+returns the full roster with each member's counts (it only 404s if you're not in
+a team). The tool doesn't render per-member channels yet, but the data's there.
 
 ### Can it show per-device / per-hardware uploads (how much each rig contributed)?
 Not yet. WDGoWars aggregates stats per *account*, `/api/me` returns your combined

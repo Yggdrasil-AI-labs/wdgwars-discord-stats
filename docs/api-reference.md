@@ -114,11 +114,12 @@ beyond that. Use the leaderboard arrays for the standings themselves and for gan
 rank (match your gang name in the `gangs` array). Show `>{top_n}` for anyone
 outside the cached window.
 
-The `gangs` array is the practical source of **gang stats** (since `/api/team/me`
-is unreliable). Each entry: `{gang_id, name, member_count, ap_count}`, and the
-array is ranked, so the position of your gang is its rank. That yields gang rank,
-member count, and total APs without the broken team endpoint. Per-driver rows are
-`{user_id, username, wifi, ble, aircraft, mesh, total, is_patron}`.
+The `gangs` array is a lightweight source of **gang stats** that works for any
+caller, including solo accounts that can't use `/api/team/me`. Each entry:
+`{gang_id, name, member_count, ap_count}`, and the array is ranked, so your
+gang's position is its rank. That yields gang rank, member count, and total APs.
+(For the full per-member roster, use `/api/team/me`, section 3.) Per-driver rows
+are `{user_id, username, wifi, ble, aircraft, mesh, total, is_patron}`.
 
 ### `GET /api/me/aps?since=<ISO8601>`: your upload volume in a window
 
@@ -150,30 +151,33 @@ visual owner the whole time.
 Per-cell AP counts for a single gang, gated to that gang's owner/officer role.
 Not a general query endpoint.
 
-### `GET /api/team/me` and `GET /api/team/{id}`: gang roster (see caveat)
+### `GET /api/team/me` and `GET /api/team/{id}`: full team dossier
 
-Both routes hit the same backend; `/me` resolves your gang and dispatches as if
-you passed its id. The intended response shape (per LOCOSP, 2026-06-02):
+Both routes hit the same backend; `/me` resolves the caller's team. This is a
+**working, documented endpoint** (per the wdgwars.pl Help page) and the proper
+source of per-member gang stats. Response shape:
 
 ```json
 {
-  "ok": true,
-  "gang": { "id": 0, "name": "", "color": "", "founded": "", "member_count": 0, "ap_count": 0, "rank": 0 },
+  "id": 22, "name": "LAB5", "color": "#a855f7", "rank": 5, "created_at": "…",
   "members": [
-    { "user_id": 0, "username": "", "role": "", "wifi": 0, "ble": 0, "aircraft": 0, "mesh": 0, "joined_at": "" }
+    { "user_id": 4, "username": "…", "role": "owner", "joined_at": "…",
+      "country": "PL", "wifi": 0, "ble": 0, "aircraft": 0, "mesh": 0, "total": 0 }
   ],
-  "bounties": { "active": 0, "completed": 0, "lifetime_earned": 0 },
-  "credits": { "balance": 0, "locked": 0 }
+  "totals": { "wifi": 0, "ble": 0, "aircraft": 0, "mesh": 0, "total": 0,
+              "reinforced": 0, "captured": 0, "lost": 0 },
+  "credits": { "balance": 0, "locked": 0, "lifetime_earned": 0 },
+  "open_bounties_created": 0, "open_bounties_against": 0
 }
 ```
 
-> Caveat: this endpoint has been unstable. It returned a `400` usage error in
-> early June, flapped between `200 OK` and errors through mid-June, and has been
-> returning `404` since around 2026-06-16. So the roster shape above is **not
-> reliably served today**. Verify against a live call before building on it; if
-> you get a `404`/`400`, treat gang roster as unavailable and use the gang name
-> from `/api/me` plus the `gangs` array on `/api/leaderboard` for gang rank.
-> Related `team-messages` endpoints currently return `403`.
+> It returns **`404` only if the caller isn't in a team** — that is correct
+> behavior, not an outage. (An earlier note here called it "not reliably served";
+> that was wrong. The 404s came from testing with a team-less account. There was
+> a genuine `400` bug in early June that appears resolved.) So for anyone in a
+> team, this gives the full member-by-member breakdown plus team totals. Solo
+> accounts get `404` and should fall back to the `gangs` array on
+> `/api/leaderboard` (rank/size/total APs, no roster).
 
 ---
 
@@ -209,8 +213,7 @@ withheld:
 | Per-cell, per-team AP breakdown | Deliberately withheld as an anti-cheat measure. Do not re-request it. |
 | Full badge catalog | No public enumeration endpoint (only your earned `badges`). |
 | Per-AP effective hardening | Not known to be exposed on any read endpoint. Do not assume a field for it. |
-| Per-device / per-hardware upload split | Not exposed. Stats are per-account; `/api/me` has no per-device breakdown, though keys carry a `device_name`. Would need a new LOCOSP surface (e.g. a `devices` array on `/api/me`: `[{device_name, wifi, ble, aircraft, mesh, total}]`). Requested; not shipped. |
-| Gang **roster** / per-member stats | Intended for `/api/team/me`, but that endpoint is not reliably served (see section 3). Gang **rank, size, and total APs** *are* available, from the `gangs` array on `/api/leaderboard` (see note below). |
+| Per-device / per-hardware upload split | Not exposed. Stats are per-account; `/api/me` has no per-device breakdown, though keys carry a `device_name`. Would need a new LOCOSP surface (e.g. a `devices` array on `/api/me`). Requested; not shipped. (Per-**member** gang stats *are* available via `/api/team/me`, section 3.) |
 
 Note: your own rank and your recent captures *are* exposed now (`your_rank` and
 `recent_captures` on `/api/me`, both shipped 2026-06-03). Earlier drafts of this
@@ -283,7 +286,7 @@ bot with Manage Channels, but reads the same endpoints documented here.
 | GET | `/api/member-territories` | X-API-Key | Cells your gang dominates (owned only). |
 | GET | `/api/contested-cells` | X-API-Key (likely) | Cells with recent capture activity. |
 | GET | `/api/bounty-target-aps?gang_id=N` | gang owner/officer | Per-cell AP counts for one gang. |
-| GET | `/api/team/me`, `/api/team/{id}` | X-API-Key | Gang roster (see section 3 caveat). |
+| GET | `/api/team/me`, `/api/team/{id}` | X-API-Key | Full team dossier: roster + per-member counts + totals + credits. `404` if not in a team. |
 | POST | `/endpoint/upload/` | X-API-Key + HMAC | Signed bulk record upload. |
 | POST | `/api/upload-csv` | X-API-Key | WiGLE-CSV multipart upload. |
 

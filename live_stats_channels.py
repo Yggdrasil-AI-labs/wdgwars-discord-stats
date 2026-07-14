@@ -105,8 +105,9 @@ USER_AGENT = "wdgwars-discord-stats/1.0 (+https://github.com/Yggdrasil-AI-labs/w
 
 # Order the fields appear in the category. Also the set of valid field names.
 FIELD_ORDER = ["User", "Team", "Gang Size", "Gang APs", "Updated", "Total",
-               "WiFi", "BLE", "ADS-B", "Mesh", "Rank", "API"]
-# Command tokens (lowercased) -> canonical field label.
+               "WiFi", "BLE", "ADS-B", "Mesh", "Reinforced", "Today", "Week",
+               "Credits", "Quota", "Rank", "API"]
+# Tokens (lowercased) -> canonical field label. Used to resolve STATS_FIELDS_OFF.
 FIELD_ALIASES = {
     "user": "User", "team": "Team", "gang": "Team", "updated": "Updated",
     "time": "Updated", "total": "Total", "wifi": "WiFi", "ble": "BLE",
@@ -114,6 +115,9 @@ FIELD_ALIASES = {
     "rank": "Rank", "api": "API",
     "gangsize": "Gang Size", "members": "Gang Size", "size": "Gang Size",
     "gangaps": "Gang APs", "gangtotal": "Gang APs", "aps": "Gang APs",
+    "reinforced": "Reinforced", "reinforce": "Reinforced",
+    "today": "Today", "week": "Week", "7d": "Week",
+    "credits": "Credits", "quota": "Quota", "limit": "Quota",
 }
 PULSE_CYCLE = ["·", ":", ".", "'"]  # visible proof a tick fired
 # Fields to hide via environment (comma-separated labels/aliases). Useful where
@@ -127,6 +131,8 @@ _ENV_FIELDS_OFF = {
 SAMPLE_ME = {
     "ok": True, "username": "SampleDriver", "gang": "Sample Gang",
     "total": 104063, "wifi": 84210, "ble": 15320, "aircraft": 4471, "mesh": 62,
+    "reinforce_total": 32573, "recent_today": 340, "recent_7d": 2110,
+    "credits": {"balance": 1662}, "new_ap_limit": {"used": 340, "cap": 500000},
     "your_rank": {"all_time": 42, "today": None, "week": 17, "top_n": 100},
 }
 
@@ -137,7 +143,8 @@ log = logging.getLogger("live-stats")
 REACTION_EMOJI = {
     "User": "👤", "Team": "🏴", "Gang Size": "👥", "Gang APs": "🏰",
     "Updated": "🕒", "Total": "📊", "WiFi": "📶", "BLE": "🔵", "ADS-B": "🛫",
-    "Mesh": "📡", "Rank": "🎯", "API": "🔌",
+    "Mesh": "📡", "Reinforced": "🧱", "Today": "📅", "Week": "📆",
+    "Credits": "🪙", "Quota": "⛽", "Rank": "🎯", "API": "🔌",
 }
 _BOT_ID = None
 
@@ -343,6 +350,12 @@ def gather_stats(sample: bool = False) -> dict:
         "BLE":     f"🔵 BLE: {fmt_int(me.get('ble', 0))}",
         "ADS-B":   f"✈ ADS-B: {fmt_int(me.get('aircraft', 0))}",
         "Mesh":    f"📡 Mesh: {fmt_int(me.get('mesh', 0))}",
+        "Reinforced": f"🧱 Reinforced: {fmt_int(me.get('reinforce_total', 0))}",
+        "Today":   f"📅 Today: {fmt_int(me.get('recent_today', 0))}",
+        "Week":    f"📆 Week: {fmt_int(me.get('recent_7d', 0))}",
+        "Credits": f"🪙 Credits: {fmt_int((me.get('credits') or {}).get('balance', 0))}",
+        "Quota":   f"⛽ Quota: {fmt_int((me.get('new_ap_limit') or {}).get('used', 0))}"
+                   f"/{fmt_int((me.get('new_ap_limit') or {}).get('cap', 0))}",
         "Rank":    f"🎯 Rank: {rank_str(me)}",
         "API":     api_line,
     }
