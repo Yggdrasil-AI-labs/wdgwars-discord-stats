@@ -29,4 +29,12 @@ jobs:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
           STATS_CATEGORY_NAME: ${{ vars.STATS_CATEGORY_NAME || '📊 │ live stats' }}
-        run: python live_stats_channels.py --once
+        run: |
+          if [ -z "$WDGWARS_API_KEY" ] || [ -z "$DISCORD_BOT_TOKEN" ] || [ -z "$DISCORD_GUILD_ID" ]; then
+            echo "GitHub Actions secrets are not set, so this workflow has nothing to do."
+            echo "To use it: add WDGWARS_API_KEY, DISCORD_BOT_TOKEN, and DISCORD_GUILD_ID under"
+            echo "Settings -> Secrets and variables -> Actions, then run '--setup' once locally."
+            echo "Skipping (this is not a failure)."
+            exit 0
+          fi
+          python live_stats_channels.py --once
