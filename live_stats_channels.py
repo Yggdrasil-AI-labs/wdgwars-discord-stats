@@ -106,14 +106,16 @@ INTERVAL = int(os.environ.get("STATS_INTERVAL", "300"))
 USER_AGENT = "wdgwars-discord-stats/1.0 (+https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats)"
 
 # Order the fields appear in the category. Also the set of valid field names.
-FIELD_ORDER = ["User", "Team", "Updated", "Total", "WiFi", "BLE",
-               "ADS-B", "Mesh", "Rank", "API"]
+FIELD_ORDER = ["User", "Team", "Gang Size", "Gang APs", "Updated", "Total",
+               "WiFi", "BLE", "ADS-B", "Mesh", "Rank", "API"]
 # Command tokens (lowercased) -> canonical field label.
 FIELD_ALIASES = {
     "user": "User", "team": "Team", "gang": "Team", "updated": "Updated",
     "time": "Updated", "total": "Total", "wifi": "WiFi", "ble": "BLE",
     "adsb": "ADS-B", "ads-b": "ADS-B", "aircraft": "ADS-B", "mesh": "Mesh",
     "rank": "Rank", "api": "API",
+    "gangsize": "Gang Size", "members": "Gang Size", "size": "Gang Size",
+    "gangaps": "Gang APs", "gangtotal": "Gang APs", "aps": "Gang APs",
 }
 ACK_EMOJI = "%E2%9C%85"  # URL-encoded check-mark for reaction acks
 PULSE_CYCLE = ["·", ":", ".", "'"]  # visible proof a tick fired
@@ -136,8 +138,9 @@ log = logging.getLogger("live-stats")
 # One reaction "button" emoji per field (single-codepoint so it encodes cleanly
 # for the Discord reactions API). Reacting on the config panel toggles the field.
 REACTION_EMOJI = {
-    "User": "👤", "Team": "🏴", "Updated": "🕒", "Total": "📊", "WiFi": "📶",
-    "BLE": "🔵", "ADS-B": "🛫", "Mesh": "📡", "Rank": "🎯", "API": "🔌",
+    "User": "👤", "Team": "🏴", "Gang Size": "👥", "Gang APs": "🏰",
+    "Updated": "🕒", "Total": "📊", "WiFi": "📶", "BLE": "🔵", "ADS-B": "🛫",
+    "Mesh": "📡", "Rank": "🎯", "API": "🔌",
 }
 _BOT_ID = None
 
@@ -319,13 +322,17 @@ def rank_str(me: dict) -> str:
     return f">{top_n}"
 
 
-def gang_rank(lb: dict, gang_name: str):
-    if not isinstance(lb, dict) or not gang_name:
-        return None
+def find_gang(lb: dict, gang_name: str):
+    """Return (rank, entry) for gang_name in the leaderboard `gangs` array, or
+    (None, None). Rank is the 1-based position; entry carries member_count and
+    ap_count. This is how we get gang stats, /api/team/me is not reliably
+    served, but the leaderboard gangs board is."""
+    if not isinstance(lb, dict) or not gang_name or gang_name == "—":
+        return None, None
     for i, e in enumerate(lb.get("gangs", []), 1):
         if isinstance(e, dict) and e.get("name") == gang_name:
-            return i
-    return None
+            return i, e
+    return None, None
 
 
 def gather_stats(sample: bool = False) -> dict:
@@ -334,7 +341,9 @@ def gather_stats(sample: bool = False) -> dict:
     tz_label = now_local.tzname() or "UTC"
 
     if sample:
-        me, latency, status, lb = SAMPLE_ME, 120, 200, {}
+        me, latency, status = SAMPLE_ME, 120, 200
+        lb = {"gangs": [{"name": "Sample Gang", "member_count": 42,
+                         "ap_count": 1234567}]}
     else:
         me, latency, status = wdgo_api("/endpoint/me")
         lb = (wdgo_api("/endpoint/leaderboard")[0] or {}) if me else {}
@@ -348,11 +357,11 @@ def gather_stats(sample: bool = False) -> dict:
         api_line = f"🔴 API: DOWN (HTTP {status})"
 
     gang = me.get("gang") or "—"
-    gr = gang_rank(lb, gang)
+    gr, ge = find_gang(lb, gang)
     team = (f"#{gr} {gang}" if gr else (gang if gang != "—" else "—"))[:30]
     username = me.get("username") or OWNER_USERNAME or "unknown"
 
-    return {
+    stats = {
         "User":    f"👤 User: {username}",
         "Team":    f"🏴 Team: {team}",
         "Updated": f"⏱ Updated: {now_local.strftime('%H:%M')} {tz_label}",
@@ -364,6 +373,12 @@ def gather_stats(sample: bool = False) -> dict:
         "Rank":    f"🎯 Rank: {rank_str(me)}",
         "API":     api_line,
     }
+    # Gang stats from the leaderboard, only when the caller is in a gang that
+    # appears on the board. Solo drivers simply don't get these channels.
+    if ge:
+        stats["Gang Size"] = f"👥 Gang Size: {fmt_int(ge.get('member_count', 0))}"
+        stats["Gang APs"] = f"🏰 Gang APs: {fmt_int(ge.get('ap_count', 0))}"
+    return stats
 
 
 # ── channel plumbing ─────────────────────────────────────────────────────────
@@ -376,10 +391,13 @@ def label_of(name: str) -> str:
     return parts[1] if len(parts) > 1 else head
 
 
-def reconcile_channels(cfg: dict):
-    """Make the category's voice channels match the enabled field set:
-    delete channels for hidden fields, create channels for newly shown ones.
-    Returns {label: channel} for the live set."""
+def reconcile_channels(active):
+    """Make the category's voice channels match `active` (the labels that are
+    both enabled and produced this tick). Deletes channels for any known field
+    not in `active` (hidden, or not applicable, e.g. gang stats for a solo
+    driver); creates channels for active labels missing one. Returns
+    {label: channel}."""
+    active = set(active)
     chs = discord_api("GET", f"/guilds/{GUILD_ID}/channels") or []
     cat = next((c for c in chs if c["type"] == 4 and c["name"] == CATEGORY_NAME), None)
     if not cat:
@@ -388,18 +406,18 @@ def reconcile_channels(cfg: dict):
     present = {label_of(c["name"]): c for c in chs
                if c["type"] == 2 and c.get("parent_id") == cat["id"]}
     for lbl, ch in list(present.items()):
-        if lbl in FIELD_ORDER and not field_enabled(cfg, lbl):
+        if lbl in FIELD_ORDER and lbl not in active:
             if discord_api("DELETE", f"/channels/{ch['id']}") is not None:
-                log.info("hid %r (deleted channel)", lbl)
+                log.info("removed %r channel", lbl)
             present.pop(lbl, None)
     for pos, lbl in enumerate(FIELD_ORDER):
-        if field_enabled(cfg, lbl) and lbl not in present:
+        if lbl in active and lbl not in present:
             created = discord_api("POST", f"/guilds/{GUILD_ID}/channels", {
                 "name": lbl, "type": 2, "parent_id": cat["id"], "position": pos,
             })
             if created:
                 present[lbl] = created
-                log.info("showed %r (created channel)", lbl)
+                log.info("added %r channel", lbl)
     return present
 
 
@@ -594,7 +612,7 @@ def tick(state: dict, sample: bool = False) -> None:
            if field_enabled(cfg, k)}
     named = {lbl: f"{val} {pulse}" for lbl, val in raw.items()}
 
-    channels = reconcile_channels(cfg)
+    channels = reconcile_channels(raw.keys())
     if not channels:
         return
     prev = state.get("prev_raw", {})
