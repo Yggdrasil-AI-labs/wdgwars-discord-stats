@@ -223,8 +223,8 @@ def field_enabled(cfg: dict, label: str) -> bool:
 
 # ── config panel ─────────────────────────────────────────────────────────────
 def render_panel_text(cfg: dict) -> str:
-    lines = ["**live-stats fields** — react with a field's emoji below to "
-             "show/hide it:", ""]
+    lines = ["**live-stats fields** (react with a field's emoji below to "
+             "show/hide it):", ""]
     for lbl in FIELD_ORDER:
         state = "✅ shown " if field_enabled(cfg, lbl) else "⬜ hidden"
         lines.append(f"{REACTION_EMOJI.get(lbl, '•')}  {state}  {lbl}")

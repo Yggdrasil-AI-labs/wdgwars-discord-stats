@@ -171,7 +171,7 @@ source of per-member gang stats. Response shape:
 }
 ```
 
-> It returns **`404` only if the caller isn't in a team** — that is correct
+> It returns **`404` only if the caller isn't in a team**, which is correct
 > behavior, not an outage. (An earlier note here called it "not reliably served";
 > that was wrong. The 404s came from testing with a team-less account. There was
 > a genuine `400` bug in early June that appears resolved.) So for anyone in a
