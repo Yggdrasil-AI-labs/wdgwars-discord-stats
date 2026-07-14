@@ -30,9 +30,11 @@ either leave that window open, or make a **Task Scheduler** task that runs
 `python C:\path\to\live_stats_channels.py --once` every few minutes.
 
 ### I don't have a machine to leave running.
-Use the **GitHub Actions** path (see the README): GitHub runs it on a schedule
-for free, no server of your own. Run `--setup` once locally first to create the
-channels.
+The tool is designed to run locally (your key stays on your machine), but if you
+truly have nowhere to run it, the **GitHub Actions** path works: GitHub runs it
+on a schedule for free, no server of your own. Run `--setup` once locally first.
+Trade-off: your key and token go into GitHub's secret store, so they leave your
+machine. If that matters, use a local option instead (even a Raspberry Pi).
 
 ### Voice-channel dashboard vs. webhook post, which do I want?
 - **`live_stats_channels.py`** (voice channels): the always-visible sidebar

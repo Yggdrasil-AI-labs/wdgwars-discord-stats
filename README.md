@@ -78,8 +78,10 @@ file or `STATS_FIELDS_OFF`.
 
 ### Step 4: keep it updating
 
-The tool is a plain Python script with no GitHub dependency, run it however you
-like. Three options, pick one:
+**This is meant to run locally.** The whole point is that it's a small,
+self-hosted Python script: your API key and bot token stay on your own machine,
+and you keep control of it. That's the recommended way to run it. Three
+local options, pick one:
 
 ```sh
 python live_stats_channels.py            # simplest: run it on any machine you control (5-min loop)
@@ -87,17 +89,20 @@ python live_stats_channels.py            # simplest: run it on any machine you c
 
 - **Your own cron / Task Scheduler:** schedule `python live_stats_channels.py --once`
   at whatever interval you want. No service, no loop process.
-
 - **systemd** (a server/Pi you own): copy `systemd/env.example` to
   `~/.config/wdgwars-discord-stats/env` (fill in, `chmod 600`), copy
   `systemd/wdgwars-live-stats.service` to `~/.config/systemd/user/`, then
   `systemctl --user enable --now wdgwars-live-stats.service`.
-- **GitHub Actions** (no machine at all): fork/clone this repo, add
-  `WDGWARS_API_KEY`, `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID` under
-  **Settings → Secrets and variables → Actions**, and the included
-  [`.github/workflows/live-stats.yml`](.github/workflows/live-stats.yml) updates
-  the display every ~10 minutes on GitHub's runners. Run `--setup` once locally
-  first to create the channels.
+
+**GitHub Actions is an option, not the default.** If you genuinely have no
+machine to leave running, fork this repo, add `WDGWARS_API_KEY`,
+`DISCORD_BOT_TOKEN`, and `DISCORD_GUILD_ID` under **Settings → Secrets and
+variables → Actions**, and the included
+[`.github/workflows/live-stats.yml`](.github/workflows/live-stats.yml) updates
+the display every ~10 minutes on GitHub's runners (run `--setup` once locally
+first). Trade-off to be aware of: this puts your key and token in GitHub's
+secret store, they leave your machine. If keeping credentials local matters to
+you, use one of the local options above.
 
 ### Choosing what to show
 

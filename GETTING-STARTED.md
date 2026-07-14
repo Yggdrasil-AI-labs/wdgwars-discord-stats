@@ -53,15 +53,19 @@ invited, missing permission, bad key), with the fix. `--setup` is safe to re-run
 Prefer to preview with no writes first? `python live_stats_channels.py --sample --dry-run`.
 
 ## Step 5: keep it updating
-The script has no GitHub dependency, run it any way you like:
+**Meant to run locally**, that's the point, your key and token stay on your own
+machine. Recommended options:
 ```sh
 python live_stats_channels.py            # run continuously (5-min loop) on any machine
 python live_stats_channels.py --once     # one update; schedule with your own cron/Task Scheduler
 ```
 - **systemd** (a server/Pi you own): see [`systemd/`](systemd/).
-- **GitHub Actions** (no machine at all): add the three values as repo Actions
-  secrets; [`.github/workflows/live-stats.yml`](.github/workflows/live-stats.yml)
-  updates it every ~10 min. Run `--setup` once locally first.
+
+**GitHub Actions is an option if you have no machine at all**: add the three
+values as repo Actions secrets; [`.github/workflows/live-stats.yml`](.github/workflows/live-stats.yml)
+updates it every ~10 min (run `--setup` once locally first). Note this uploads
+your key and token to GitHub's secret store, they leave your machine. Prefer a
+local option if that matters to you.
 
 ## Step 6: choose what to show
 - **React on the panel:** the pinned panel in `#stats-config` has an emoji per
