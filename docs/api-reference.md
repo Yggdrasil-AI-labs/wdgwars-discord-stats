@@ -78,7 +78,7 @@ library's transport code):
 |---|---|---|
 | `ok` | bool | `true` on success. On failure, `ok` is falsey and `error` holds a string. |
 | `username` | string | Your display name. |
-| `gang` | string | Your gang name (absent / `—` if you are not in one). |
+| `gang` | string | Your gang name (absent / `-` if you are not in one). |
 | `wifi` | int | Wi-Fi networks credited to you. |
 | `ble` | int | Bluetooth LE devices credited to you. |
 | `aircraft` | int | ADS-B aircraft credited to you. |

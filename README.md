@@ -1,8 +1,33 @@
+<p align="center">
+  <img src="assets/banner.svg" alt="wdgwars-discord-stats - your live WDGoWars numbers in your Discord sidebar" width="100%"/>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://sonarcloud.io/dashboard?id=Yggdrasil-AI-labs_wdgwars-discord-stats"><img alt="Quality gate" src="https://sonarcloud.io/api/project_badges/measure?project=Yggdrasil-AI-labs_wdgwars-discord-stats&metric=alert_status"></a>
+  <a href="https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Yggdrasil-AI-labs/wdgwars-discord-stats?color=b08850&label=release"></a>
+  <a href="#requirements"><img alt="Python 3.8+" src="https://img.shields.io/badge/python-3.8%2B-b08850.svg"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-b08850.svg"></a>
+  <a href="SECURITY.md"><img alt="Security" src="https://img.shields.io/badge/security-threat%20model-b08850.svg"></a>
+</p>
+
 # wdgwars-discord-stats
 
-Build your own [WDGoWars](https://wdgwars.pl) stats display in Discord.
+Build your own [WDGoWars](https://wdgwars.pl) stats display in Discord: a live
+voice-channel dashboard, a one-shot webhook poster, and a consolidated API
+reference so you can build something bigger. Standard-library Python, no
+dependencies to install.
 
-Two ready-to-run displays plus the docs to build your own:
+## Family
+
+Part of the WDGoWars feeder and tooling family:
+
+- [Muninn](https://github.com/Yggdrasil-AI-labs/adsb-to-wdgwars) - ADS-B feeder
+- [Heimdall](https://github.com/Yggdrasil-AI-labs/meshcore-to-wdgwars) - MeshCore LoRa feeder
+- [wigle-to-wdgwars](https://github.com/Yggdrasil-AI-labs/wigle-to-wdgwars) - WiGLE Wi-Fi/BLE feeder
+- [gungnir](https://github.com/Yggdrasil-AI-labs/gungnir) - shared HMAC upload transport library
+
+## What's here
 
 1. **Live voice-channel display** (`live_stats_channels.py`): a category of
    channels whose names show your current numbers, updated on a schedule, the
@@ -11,8 +36,6 @@ Two ready-to-run displays plus the docs to build your own:
    channel via an incoming webhook. No bot, just a webhook URL. Simplest.
 3. A [consolidated WDGoWars API reference](docs/api-reference.md) so you can
    build something bigger.
-
-Everything is standard-library only. Fork it, change your config, run it.
 
 **New here?** [GETTING-STARTED.md](GETTING-STARTED.md) is a full zero-to-running
 walkthrough, and [FAQ.md](FAQ.md) covers common situations (reusing an existing
@@ -89,7 +112,7 @@ python live_stats_channels.py            # simplest: run it on any machine you c
 
 - **Your own cron / Task Scheduler:** schedule `python live_stats_channels.py --once`
   at whatever interval you want. No service, no loop process.
-- **systemd** (a server/Pi you own): copy `systemd/env.example` to
+- **systemd** (a server/Pi you own): copy `.env.example` to
   `~/.config/wdgwars-discord-stats/env` (fill in, `chmod 600`), copy
   `systemd/wdgwars-live-stats.service` to `~/.config/systemd/user/`, then
   `systemctl --user enable --now wdgwars-live-stats.service`.
@@ -160,15 +183,6 @@ returns your username, per-type capture counts (Wi-Fi, BLE, aircraft, MeshCore),
 and lifetime total. See the [API reference](docs/api-reference.md) for the full
 field list, what the API does not expose, and the other read endpoints you can
 build on.
-
-## Family
-
-Part of the WDGoWars feeder and tooling family:
-
-- [gungnir](https://github.com/Yggdrasil-AI-labs/gungnir) - shared upload transport client
-- [Muninn](https://github.com/Yggdrasil-AI-labs/adsb-to-wdgwars) - ADS-B feeder
-- [Heimdall](https://github.com/Yggdrasil-AI-labs/meshcore-to-wdgwars) - MeshCore LoRa feeder
-- [wigle-to-wdgwars](https://github.com/Yggdrasil-AI-labs/wigle-to-wdgwars) - WiGLE Wi-Fi/BLE feeder
 
 ## A note on scope
 

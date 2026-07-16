@@ -5,7 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Secrets live in this file (see env.example). chmod 600 it. Never commit it.
+# Secrets live in this file: copy the repo's .env.example here, fill it in, and
+# chmod 600 it. Never commit it.
 EnvironmentFile=%h/.config/wdgwars-discord-stats/env
 # Adjust the path if you cloned the repo somewhere else.
 ExecStart=/usr/bin/python3 %h/wdgwars-discord-stats/live_stats_channels.py

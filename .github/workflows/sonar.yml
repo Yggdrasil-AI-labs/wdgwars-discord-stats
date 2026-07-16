@@ -1,0 +1,21 @@
+name: Sonar
+
+# SonarCloud analysis. Run on demand from the Actions tab after the one-time
+# SonarCloud import (see sonar-project.properties). Kept off push so a repo
+# without the SONAR_TOKEN secret never shows a failed run.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  sonarcloud:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io

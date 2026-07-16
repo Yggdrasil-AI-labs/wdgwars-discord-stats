@@ -1,0 +1,35 @@
+name: CI
+
+# Lightweight quality gate: byte-compile both scripts and run them in their
+# offline modes (--sample --dry-run needs no key, no token, no network) across
+# the supported Python range. No secrets are used here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Byte-compile
+        run: python -m compileall -q live_stats_channels.py discord_stats_webhook.py
+      - name: Live-stats dry run (offline sample)
+        run: python live_stats_channels.py --sample --dry-run
+      - name: Webhook dry run (offline sample)
+        run: python discord_stats_webhook.py --sample --dry-run
+      - name: Field-toggle env var honored
+        run: |
+          out=$(STATS_FIELDS_OFF="ble,rank" python live_stats_channels.py --sample --dry-run)
+          echo "$out" | grep -q "⬜ 🔵 BLE" || { echo "STATS_FIELDS_OFF did not hide BLE"; exit 1; }
+          echo "$out" | grep -q "⬜ 🎯 Rank" || { echo "STATS_FIELDS_OFF did not hide Rank"; exit 1; }

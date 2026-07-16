@@ -107,23 +107,12 @@ USER_AGENT = "wdgwars-discord-stats/1.0 (+https://github.com/Yggdrasil-AI-labs/w
 FIELD_ORDER = ["User", "Team", "Gang Size", "Gang APs", "Updated", "Total",
                "WiFi", "BLE", "ADS-B", "Mesh", "Reinforced", "Today", "Week",
                "Credits", "Quota", "Rank", "API"]
-# Tokens (lowercased) -> canonical field label. Used to resolve STATS_FIELDS_OFF.
-FIELD_ALIASES = {
-    "user": "User", "team": "Team", "gang": "Team", "updated": "Updated",
-    "time": "Updated", "total": "Total", "wifi": "WiFi", "ble": "BLE",
-    "adsb": "ADS-B", "ads-b": "ADS-B", "aircraft": "ADS-B", "mesh": "Mesh",
-    "rank": "Rank", "api": "API",
-    "gangsize": "Gang Size", "members": "Gang Size", "size": "Gang Size",
-    "gangaps": "Gang APs", "gangtotal": "Gang APs", "aps": "Gang APs",
-    "reinforced": "Reinforced", "reinforce": "Reinforced",
-    "today": "Today", "week": "Week", "7d": "Week",
-    "credits": "Credits", "quota": "Quota", "limit": "Quota",
-}
-PULSE_CYCLE = ["·", ":", ".", "'"]  # visible proof a tick fired
-# Fields to hide via environment (comma-separated labels/aliases). Useful where
+# Fields to hide via environment: STATS_FIELDS_OFF is a comma-separated list of
+# field labels, matched case-insensitively (e.g. "ble,rank,ads-b"). Useful where
 # the config file does not persist, e.g. GitHub Actions.
+_FIELD_BY_CASEFOLD = {lbl.casefold(): lbl for lbl in FIELD_ORDER}
 _ENV_FIELDS_OFF = {
-    FIELD_ALIASES.get(tok.strip().lower(), tok.strip())
+    _FIELD_BY_CASEFOLD.get(tok.strip().casefold(), tok.strip())
     for tok in os.environ.get("STATS_FIELDS_OFF", "").split(",") if tok.strip()
 }
 
@@ -305,9 +294,10 @@ def rank_str(me: dict) -> str:
 def find_gang(lb: dict, gang_name: str):
     """Return (rank, entry) for gang_name in the leaderboard `gangs` array, or
     (None, None). Rank is the 1-based position; entry carries member_count and
-    ap_count. This is how we get gang stats, /api/team/me is not reliably
-    served, but the leaderboard gangs board is."""
-    if not isinstance(lb, dict) or not gang_name or gang_name == "—":
+    ap_count. The leaderboard `gangs` board is the lightweight source of gang
+    stats that works for any caller, including solo accounts; /api/team/me gives
+    the full per-member roster but 404s when you are not in a team."""
+    if not isinstance(lb, dict) or not gang_name or gang_name == "-":
         return None, None
     for i, e in enumerate(lb.get("gangs", []), 1):
         if isinstance(e, dict) and e.get("name") == gang_name:
@@ -336,9 +326,9 @@ def gather_stats(sample: bool = False) -> dict:
     else:
         api_line = f"🔴 API: DOWN (HTTP {status})"
 
-    gang = me.get("gang") or "—"
+    gang = me.get("gang") or "-"
     gr, ge = find_gang(lb, gang)
-    team = (f"#{gr} {gang}" if gr else (gang if gang != "—" else "—"))[:30]
+    team = (f"#{gr} {gang}" if gr else (gang if gang != "-" else "-"))[:30]
     username = me.get("username") or OWNER_USERNAME or "unknown"
 
     stats = {
@@ -551,25 +541,19 @@ def tick(state: dict, sample: bool = False) -> None:
     poll_reactions(cfg)
 
     t = state.get("tick", 0)
-    pulse = PULSE_CYCLE[t % len(PULSE_CYCLE)]
-    is_data_tick = t % 2 == 0
-
     raw = {k: v for k, v in gather_stats(sample=sample).items()
            if field_enabled(cfg, k)}
-    named = {lbl: f"{val} {pulse}" for lbl, val in raw.items()}
 
     channels = reconcile_channels(raw.keys())
     if not channels:
         return
-    prev = state.get("prev_raw", {})
     changes = 0
-    for lbl, new_name in named.items():
+    # Rename only when the value actually changed (the channel name already
+    # carries the last value), which keeps well inside Discord's rename rate
+    # limit. The Updated field changes with the clock, so it refreshes on its own.
+    for lbl, new_name in raw.items():
         ch = channels.get(lbl)
         if not ch or ch["name"] == new_name:
-            continue
-        # Rename Updated every tick; data channels on value change or every
-        # other tick (rate-limit-friendly).
-        if lbl != "Updated" and raw[lbl] == prev.get(lbl) and not is_data_tick:
             continue
         if discord_api("PATCH", f"/channels/{ch['id']}", {"name": new_name}) is not None:
             changes += 1
@@ -577,7 +561,7 @@ def tick(state: dict, sample: bool = False) -> None:
     state["prev_raw"] = raw
     state["updated_iso"] = datetime.now(timezone.utc).isoformat()
     save_json(STATE_PATH, state)
-    log.info("tick %d: %d/%d channels renamed", t, changes, len(named))
+    log.info("tick %d: %d/%d channels updated", t, changes, len(raw))
 
 
 def dry_run(sample: bool) -> int:

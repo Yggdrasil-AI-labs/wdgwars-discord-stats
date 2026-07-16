@@ -1,0 +1,41 @@
+{
+  "username": "WDGoWars Stats",
+  "embeds": [
+    {
+      "title": "SampleDriver on WDGoWars",
+      "description": "Gang: Sample Gang",
+      "url": "https://wdgwars.pl/profile",
+      "color": 11569232,
+      "fields": [
+        {
+          "name": "Wi-Fi",
+          "value": "12,345",
+          "inline": true
+        },
+        {
+          "name": "BLE",
+          "value": "678",
+          "inline": true
+        },
+        {
+          "name": "Aircraft",
+          "value": "90",
+          "inline": true
+        },
+        {
+          "name": "MeshCore",
+          "value": "12",
+          "inline": true
+        },
+        {
+          "name": "Total",
+          "value": "13,125",
+          "inline": true
+        }
+      ],
+      "footer": {
+        "text": "via /api/me"
+      }
+    }
+  ]
+}

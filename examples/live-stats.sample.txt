@@ -1,0 +1,19 @@
+category: '📊 │ live stats'
+fields (✅ shown, ⬜ hidden by config):
+  ✅ 👤 User: SampleDriver
+  ✅ 🏴 Team: #1 Sample Gang
+  ✅ 👥 Gang Size: 42
+  ✅ 🏰 Gang APs: 1 234 567
+  ✅ ⏱ Updated: 12:47 UTC
+  ✅ 📊 Total: 104 063
+  ✅ 📶 WiFi: 84 210
+  ✅ 🔵 BLE: 15 320
+  ✅ ✈ ADS-B: 4 471
+  ✅ 📡 Mesh: 62
+  ✅ 🧱 Reinforced: 32 573
+  ✅ 📅 Today: 340
+  ✅ 📆 Week: 2 110
+  ✅ 🪙 Credits: 1 662
+  ✅ ⛽ Quota: 340/500 000
+  ✅ 🎯 Rank: #42 all time
+  ✅ 🟢 API: UP (120ms)
