@@ -1,0 +1,114 @@
+name: ci-quality-gates
+
+# Gated pipeline: test + coverage -> SonarCloud + Snyk -> release bundle.
+# The package stage only runs if both gates pass. The lightweight ci.yml
+# workflow stays as the offline smoke suite; this adds the code-quality and
+# security gates on top, matching the rest of the feeder family.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Stage 1: run pytest, produce coverage.xml.
+  test:
+    name: Test and coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so SonarCloud can attribute new code and blame.
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run pytest with coverage
+        run: pytest --cov=live_stats_channels --cov=discord_stats_webhook --cov-report=xml --cov-report=term-missing --cov-branch
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          retention-days: 7
+
+  # Stage 2a: SonarCloud static analysis + quality gate (reads coverage.xml).
+  sonarcloud:
+    name: SonarCloud quality gate
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-xml
+      - name: SonarCloud scan and quality gate
+        # sonar.qualitygate.wait=true (in sonar-project.properties) makes this
+        # step fail the job when the gate fails, not just report it.
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+
+  # Stage 2b: Snyk software composition analysis. The tool is stdlib-only, so
+  # there is nothing in requirements.txt to flag today; this runs for parity
+  # and catches the moment a real dependency is ever added.
+  snyk:
+    name: Snyk dependency scan
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Snyk Open Source scan (fail on high or critical)
+        uses: snyk/actions/python@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --file=requirements.txt --severity-threshold=high
+      - name: Snyk monitor (track shipped deps for new CVEs)
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        uses: snyk/actions/python@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: monitor
+          args: --file=requirements.txt
+
+  # Stage 3: build the release bundle. Only if both gates passed, main only.
+  package:
+    name: Build release artifact
+    needs: [sonarcloud, snyk]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage release bundle
+        run: |
+          mkdir -p dist
+          cp live_stats_channels.py discord_stats_webhook.py README.md LICENSE dist/
+          cp -r docs dist/docs
+          tar -czf wdgwars-discord-stats-bundle.tar.gz -C dist .
+      - name: Upload release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: wdgwars-discord-stats-bundle
+          path: wdgwars-discord-stats-bundle.tar.gz
+          retention-days: 14

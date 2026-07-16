@@ -1,0 +1,5 @@
+# Runtime dependencies: none.
+#
+# Both scripts (live_stats_channels.py, discord_stats_webhook.py) are pure
+# standard-library Python. This file exists so the CI dependency scan (Snyk)
+# and tooling have a manifest to read; there is nothing to install at runtime.
