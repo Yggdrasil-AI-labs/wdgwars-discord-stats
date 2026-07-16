@@ -4,8 +4,6 @@
 
 <p align="center">
   <a href="https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://sonarcloud.io/dashboard?id=Yggdrasil-AI-labs_wdgwars-discord-stats"><img alt="Quality gate" src="https://sonarcloud.io/api/project_badges/measure?project=Yggdrasil-AI-labs_wdgwars-discord-stats&metric=alert_status"></a>
-  <a href="https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Yggdrasil-AI-labs/wdgwars-discord-stats?color=b08850&label=release"></a>
   <a href="#requirements"><img alt="Python 3.8+" src="https://img.shields.io/badge/python-3.8%2B-b08850.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-b08850.svg"></a>
   <a href="SECURITY.md"><img alt="Security" src="https://img.shields.io/badge/security-threat%20model-b08850.svg"></a>
