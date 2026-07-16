@@ -146,7 +146,10 @@ def bot_id() -> str:
     global _BOT_ID
     if _BOT_ID is None:
         me = discord_api("GET", "/users/@me")
-        _BOT_ID = me.get("id", "") if isinstance(me, dict) else ""
+        if isinstance(me, dict) and me.get("id"):
+            _BOT_ID = me["id"]
+        else:
+            return ""  # transient failure: don't cache it, retry next call
     return _BOT_ID
 
 
@@ -307,8 +310,10 @@ def find_gang(lb: dict, gang_name: str):
     return None, None
 
 
-def gather_stats(sample: bool = False) -> dict:
-    """Build the label->value map for every field (before visibility filter)."""
+def gather_stats(sample: bool = False):
+    """Build the label->value map for every field (before visibility filter).
+    Returns (stats, api_ok); api_ok is False when WDGoWars was unreachable, so
+    the caller can avoid overwriting good numbers with the zero fallbacks."""
     now_local = datetime.now(TZ)
     tz_label = now_local.tzname() or "UTC"
 
@@ -356,7 +361,7 @@ def gather_stats(sample: bool = False) -> dict:
     if ge:
         stats["Gang Size"] = f"👥 Gang Size: {fmt_int(ge.get('member_count', 0))}"
         stats["Gang APs"] = f"🏰 Gang APs: {fmt_int(ge.get('ap_count', 0))}"
-    return stats
+    return stats, api_ok
 
 
 # ── channel plumbing ─────────────────────────────────────────────────────────
@@ -538,13 +543,42 @@ def setup_discord() -> int:
 
 
 # ── tick ─────────────────────────────────────────────────────────────────────
+def _refresh_api_channel(api_name: str) -> None:
+    """Rename only the API-status channel. Used when WDGoWars is down so the
+    status flips to DOWN without touching the data channels. No-op if the field
+    is hidden or the category/channel does not exist yet."""
+    if not api_name:
+        return
+    chs = discord_api("GET", f"/guilds/{GUILD_ID}/channels") or []
+    cat = next((c for c in chs if c["type"] == 4 and c["name"] == CATEGORY_NAME), None)
+    if not cat:
+        return
+    for c in chs:
+        if (c["type"] == 2 and c.get("parent_id") == cat["id"]
+                and label_of(c["name"]) == "API"):
+            if c["name"] != api_name:
+                discord_api("PATCH", f"/channels/{c['id']}", {"name": api_name})
+            return
+
+
 def tick(state: dict, sample: bool = False) -> None:
     cfg = load_config()
     poll_reactions(cfg)
 
     t = state.get("tick", 0)
-    raw = {k: v for k, v in gather_stats(sample=sample).items()
-           if field_enabled(cfg, k)}
+    stats, api_ok = gather_stats(sample=sample)
+    raw = {k: v for k, v in stats.items() if field_enabled(cfg, k)}
+
+    # When WDGoWars is unreachable its counts fall back to zero. Don't repaint
+    # the whole dashboard with 0s over good numbers: flip only the API channel
+    # to DOWN and leave the data channels showing their last good values.
+    if not sample and not api_ok:
+        _refresh_api_channel(raw.get("API"))
+        state["tick"] = t + 1
+        state["updated_iso"] = datetime.now(timezone.utc).isoformat()
+        save_json(STATE_PATH, state)
+        log.warning("tick %d: WDGoWars API down, left data channels unchanged", t)
+        return
 
     channels = reconcile_channels(raw.keys())
     if not channels:
@@ -568,7 +602,7 @@ def tick(state: dict, sample: bool = False) -> None:
 
 def dry_run(sample: bool) -> int:
     cfg = load_config()
-    stats = gather_stats(sample=sample)
+    stats, _ = gather_stats(sample=sample)
     print(f"category: {CATEGORY_NAME!r}")
     print("fields (✅ shown, ⬜ hidden by config):")
     for lbl in FIELD_ORDER:

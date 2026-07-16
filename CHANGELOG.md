@@ -41,6 +41,13 @@ plus a consolidated API reference. Standard-library Python, no dependencies.
   surface, including `your_rank` and `recent_captures` on `/api/me` and the
   `/api/team/me` team dossier.
 
+### Reliability
+
+- If WDGoWars is briefly unreachable, the dashboard keeps the last good numbers
+  and flips only the API channel to DOWN, instead of blanking every stat to 0.
+- The bot's own user id is not cached after a failed lookup, so a transient
+  error no longer disables the reaction panel until the next restart.
+
 ### Security
 
 - API key and bot token are read from the environment, never printed, and

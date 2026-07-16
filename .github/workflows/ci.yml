@@ -33,3 +33,6 @@ jobs:
           out=$(STATS_FIELDS_OFF="ble,rank" python live_stats_channels.py --sample --dry-run)
           echo "$out" | grep -q "⬜ 🔵 BLE" || { echo "STATS_FIELDS_OFF did not hide BLE"; exit 1; }
           echo "$out" | grep -q "⬜ 🎯 Rank" || { echo "STATS_FIELDS_OFF did not hide Rank"; exit 1; }
+      - name: Stats contract (gather_stats returns data + api_ok)
+        run: |
+          python -c "import live_stats_channels as m; s, ok = m.gather_stats(sample=True); assert ok is True; assert 'Total' in s and 'API' in s; print('gather_stats contract OK')"
