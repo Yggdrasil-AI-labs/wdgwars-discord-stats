@@ -3,3 +3,13 @@ __pycache__/
 .venv/
 venv/
 .env
+
+# Test + coverage artifacts
+.coverage
+coverage.xml
+.pytest_cache/
+htmlcov/
+
+# CI release bundle staging
+dist/
+*.tar.gz
