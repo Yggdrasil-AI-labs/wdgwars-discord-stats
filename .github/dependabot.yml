@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # Keep the GitHub Actions used by the workflows current. This is the only
+  # dependency surface: the tool itself is standard-library Python with no
+  # packages to update. Monthly keeps PR noise low for a small repo.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "ci"

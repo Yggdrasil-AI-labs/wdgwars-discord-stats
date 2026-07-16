@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="#requirements"><img alt="Python 3.8+" src="https://img.shields.io/badge/python-3.8%2B-b08850.svg"></a>
+  <a href="#requirements"><img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-b08850.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-b08850.svg"></a>
   <a href="SECURITY.md"><img alt="Security" src="https://img.shields.io/badge/security-threat%20model-b08850.svg"></a>
 </p>
@@ -185,7 +185,7 @@ That is the whole thing. Put it on a cron if you want a daily stats post.
 
 ## Requirements
 
-Python 3.8 or newer. Standard library only, nothing to install.
+Python 3.9 or newer. Standard library only, nothing to install.
 
 ## Key safety
 

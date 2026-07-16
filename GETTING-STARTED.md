@@ -4,7 +4,7 @@ Zero to a live WDGoWars stats display in your Discord. The only manual part is
 making a bot (step 2); everything else is one command.
 
 ## What you need
-- Python 3.8+ (`python --version`)
+- Python 3.9+ (`python --version`)
 - A Discord server where you have admin / Manage Server
 - A WDGoWars account
 

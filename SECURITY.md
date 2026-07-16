@@ -58,7 +58,7 @@ rotate it at `wdgwars.pl/profile`.
 
 ## Dependencies
 
-None. Both scripts are standard-library Python (3.8+). There is no third-party
+None. Both scripts are standard-library Python (3.9+). There is no third-party
 package in the runtime path, so there is no dependency supply chain to audit.
 
 ## Hosting trade-off
