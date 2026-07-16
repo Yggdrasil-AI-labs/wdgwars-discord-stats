@@ -101,21 +101,41 @@ file or `STATS_FIELDS_OFF`.
 
 ### Step 4: keep it updating
 
-**This is meant to run locally.** The whole point is that it's a small,
-self-hosted Python script: your API key and bot token stay on your own machine,
-and you keep control of it. That's the recommended way to run it. Three
-local options, pick one:
+**This is meant to run locally.** It's a small, self-hosted Python script: your
+API key and bot token stay on your own machine and you keep control of it.
+
+**Easiest: let it install itself.** One command sets up a quiet,
+boot-persistent background runner for your platform:
 
 ```sh
-python live_stats_channels.py            # simplest: run it on any machine you control (5-min loop)
+python live_stats_channels.py --schedule
 ```
 
-- **Your own cron / Task Scheduler:** schedule `python live_stats_channels.py --once`
-  at whatever interval you want. No service, no loop process.
-- **systemd** (a server/Pi you own): copy `.env.example` to
-  `~/.config/wdgwars-discord-stats/env` (fill in, `chmod 600`), copy
-  `systemd/wdgwars-live-stats.service` to `~/.config/systemd/user/`, then
-  `systemctl --user enable --now wdgwars-live-stats.service`.
+- **Windows:** creates a Scheduled Task that runs every 5 minutes with
+  `pythonw.exe`, so **no console window pops up** and there is no log spam. It
+  runs while you are logged in.
+- **Linux / Raspberry Pi:** installs a `systemd --user` service, enables
+  lingering (so it starts at boot and keeps running after you log out of SSH),
+  and starts it. Follow it with `journalctl --user -u wdgwars-live-stats -f`.
+- **Anything else:** prints a `cron` line for you to add with `crontab -e`.
+
+Undo it any time with `python live_stats_channels.py --unschedule`. The interval
+comes from `STATS_INTERVAL` (seconds, default 300), so set that before
+`--schedule` if you want a different cadence.
+
+**Prefer to wire it up yourself?** Any of these work too:
+
+```sh
+python live_stats_channels.py            # run in the foreground (5-min loop)
+python live_stats_channels.py --once     # one update; point your own cron / Task Scheduler at it
+```
+
+For systemd by hand: copy `.env.example` to
+`~/.config/wdgwars-discord-stats/env` (fill in, `chmod 600`), copy
+`systemd/wdgwars-live-stats.service` to `~/.config/systemd/user/`, run
+`loginctl enable-linger $USER`, then
+`systemctl --user enable --now wdgwars-live-stats.service`. (`--schedule` does
+all of that for you.)
 
 **GitHub Actions is an option, not the default.** If you genuinely have no
 machine to leave running, fork this repo, add `WDGWARS_API_KEY`,

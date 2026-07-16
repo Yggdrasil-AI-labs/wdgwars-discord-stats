@@ -51,6 +51,8 @@ import argparse
 import json
 import logging
 import os
+import shutil
+import subprocess
 import sys
 import time
 import urllib.error
@@ -666,6 +668,135 @@ def run_wizard() -> bool:
     return True
 
 
+# ── auto-run install (--schedule) ─────────────────────────────────────────────
+TASK_NAME = "wdgwars-discord-stats"
+SERVICE_NAME = "wdgwars-live-stats.service"
+
+
+def _pythonw() -> str:
+    """The windowless Python for this interpreter (pythonw.exe on Windows, so a
+    scheduled run does not flash a console window every tick). Falls back to the
+    normal interpreter if pythonw is missing."""
+    exe = sys.executable or "python"
+    if os.name == "nt":
+        cand = os.path.join(os.path.dirname(exe), "pythonw.exe")
+        if os.path.exists(cand):
+            return cand
+    return exe
+
+
+def _interval_minutes() -> int:
+    return max(1, INTERVAL // 60)
+
+
+def install_schedule() -> int:
+    """Install a boot-persistent, quiet auto-runner for the current platform:
+    a windowless Scheduled Task on Windows, a lingering systemd user service on
+    Linux/Pi, or a printed cron line as a fallback."""
+    script = os.path.abspath(__file__)
+    if os.name == "nt":
+        return _install_windows(script)
+    if shutil.which("systemctl"):
+        return _install_systemd(script)
+    return _install_cron(script)
+
+
+def _install_windows(script: str) -> int:
+    mins = _interval_minutes()
+    # pythonw.exe + --quiet: no console window pops up on each run, no log spam.
+    tr = f'"{_pythonw()}" "{script}" --once --quiet'
+    cmd = ["schtasks", "/Create", "/TN", TASK_NAME, "/TR", tr,
+           "/SC", "MINUTE", "/MO", str(mins), "/F"]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        print("Could not create the scheduled task:")
+        print("  " + scrub((r.stderr or r.stdout).strip()))
+        return 1
+    print(f"Scheduled task '{TASK_NAME}' created: runs every {mins} min, "
+          "windowless (no popup), quiet.")
+    print("It runs while you are logged in. Remove it with:")
+    print("  python live_stats_channels.py --unschedule")
+    return 0
+
+
+def _install_systemd(script: str) -> int:
+    unit_dir = os.path.expanduser("~/.config/systemd/user")
+    os.makedirs(unit_dir, exist_ok=True)
+    env_file = os.path.expanduser("~/.config/wdgwars-discord-stats/env")
+    env_line = (f"EnvironmentFile={env_file}" if os.path.exists(env_file)
+                else "# EnvironmentFile=%h/.config/wdgwars-discord-stats/env  "
+                     "# (create it, or rely on the .env beside the script)")
+    unit = (
+        "[Unit]\n"
+        "Description=WDGoWars live-stats Discord display\n"
+        "After=network-online.target\n"
+        "Wants=network-online.target\n\n"
+        "[Service]\n"
+        "Type=simple\n"
+        f"{env_line}\n"
+        f"ExecStart={sys.executable} {script} --quiet\n"
+        "Restart=on-failure\n"
+        "RestartSec=30\n\n"
+        "[Install]\n"
+        "WantedBy=default.target\n"
+    )
+    with open(os.path.join(unit_dir, SERVICE_NAME), "w") as f:
+        f.write(unit)
+    # enable-linger so the service starts at boot and survives logout on a
+    # headless box (the usual "it stopped when I closed my SSH session" gotcha).
+    user = os.environ.get("USER") or ""
+    if user:
+        subprocess.run(["loginctl", "enable-linger", user],
+                       capture_output=True, text=True)
+    subprocess.run(["systemctl", "--user", "daemon-reload"],
+                   capture_output=True, text=True)
+    r = subprocess.run(["systemctl", "--user", "enable", "--now", SERVICE_NAME],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        print("Wrote the unit but could not enable it:")
+        print("  " + scrub(r.stderr.strip()))
+        print(f"Finish manually:  systemctl --user enable --now {SERVICE_NAME}")
+        return 1
+    print(f"Installed and started systemd user service '{SERVICE_NAME}'.")
+    print("Runs continuously, restarts on failure, starts at boot (lingering on).")
+    print(f"Follow logs:  journalctl --user -u {SERVICE_NAME} -f")
+    print("Remove it with:  python live_stats_channels.py --unschedule")
+    return 0
+
+
+def _install_cron(script: str) -> int:
+    mins = _interval_minutes()
+    line = (f"*/{mins} * * * * cd {os.path.dirname(script)} && "
+            f"{sys.executable} {script} --once --quiet")
+    print("No systemd here. Add this line with `crontab -e` (review it first):\n")
+    print("  " + line)
+    print(f"\nThat runs one quiet update every {mins} min.")
+    return 0
+
+
+def remove_schedule() -> int:
+    """Undo install_schedule() for the current platform."""
+    if os.name == "nt":
+        r = subprocess.run(["schtasks", "/Delete", "/TN", TASK_NAME, "/F"],
+                           capture_output=True, text=True)
+        print(f"Removed scheduled task '{TASK_NAME}'." if r.returncode == 0
+              else f"No task '{TASK_NAME}' to remove (or delete failed).")
+        return 0
+    if shutil.which("systemctl"):
+        subprocess.run(["systemctl", "--user", "disable", "--now", SERVICE_NAME],
+                       capture_output=True, text=True)
+        try:
+            os.remove(os.path.expanduser(f"~/.config/systemd/user/{SERVICE_NAME}"))
+        except FileNotFoundError:
+            pass
+        subprocess.run(["systemctl", "--user", "daemon-reload"],
+                       capture_output=True, text=True)
+        print(f"Disabled and removed systemd user service '{SERVICE_NAME}'.")
+        return 0
+    print("Nothing auto-installed to remove (cron entries are manual: crontab -e).")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Show WDGoWars stats as Discord voice-channel labels.")
@@ -679,6 +810,13 @@ def main() -> int:
                         help="create the category + mod-config channel + panel, then exit")
     parser.add_argument("--check", action="store_true",
                         help="validate token/server/permissions/key and exit (no changes)")
+    parser.add_argument("--schedule", action="store_true",
+                        help="install a quiet, boot-persistent auto-runner for this "
+                             "platform (windowless task on Windows, systemd on Linux/Pi)")
+    parser.add_argument("--unschedule", action="store_true",
+                        help="remove the auto-runner installed by --schedule")
+    parser.add_argument("--quiet", action="store_true",
+                        help="log warnings and errors only (used by the scheduled runner)")
     args = parser.parse_args()
 
     # Field labels contain emoji; make sure stdout can render them even on a
@@ -689,9 +827,14 @@ def main() -> int:
         except Exception:
             pass
 
+    level = "WARNING" if args.quiet else os.environ.get("STATS_LOG_LEVEL", "INFO")
     logging.basicConfig(
-        level=os.environ.get("STATS_LOG_LEVEL", "INFO"),
+        level=level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+    # Removing the auto-runner needs no config, so handle it before any checks.
+    if args.unschedule:
+        return remove_schedule()
 
     if args.sample and not (args.once or args.dry_run):
         raise SystemExit("--sample only makes sense with --once or --dry-run")
@@ -724,6 +867,15 @@ def main() -> int:
 
     if not args.sample and not WDGO_KEY:
         raise SystemExit("set WDGWARS_API_KEY (or pass --sample)")
+
+    if args.schedule:
+        # The scheduled runs need a working config and the channels to exist.
+        checks, can_write, key_ok = preflight()
+        print_checks(checks)
+        if not can_write or key_ok is False:
+            raise SystemExit("fix the config issues above, then --schedule again")
+        print("Tip: run --setup once first so the channels exist.\n")
+        return install_schedule()
 
     state = load_json(STATE_PATH, {"tick": 0})
     if args.once:

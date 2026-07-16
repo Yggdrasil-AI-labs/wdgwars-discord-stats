@@ -25,6 +25,13 @@ plus a consolidated API reference. Standard-library Python, no dependencies.
   continues. TTY-only, so cron/CI/systemd fall through to env/`.env`.
 - **`--check` doctor mode**: validates the bot token, server membership, Manage
   Channels permission, and API key, printing the exact fix for each failure.
+- **`--schedule` / `--unschedule`**: one command installs a quiet,
+  boot-persistent auto-runner for the current platform: a windowless
+  (`pythonw.exe`) Scheduled Task on Windows so no console window pops up, a
+  lingering `systemd --user` service on Linux/Pi (starts at boot, survives
+  logout), or a printed `cron` line as a fallback.
+- **`--quiet`**: log warnings and errors only. Used automatically by the
+  scheduled runner so background operation stays silent.
 - **Per-field visibility**: toggle fields by reacting on the pinned panel, editing
   the config file, or setting `STATS_FIELDS_OFF` (comma-separated, case-insensitive).
 - **Hosting options**: continuous loop, `--once` for your own cron, an included

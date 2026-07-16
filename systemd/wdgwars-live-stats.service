@@ -8,10 +8,14 @@ Type=simple
 # Secrets live in this file: copy the repo's .env.example here, fill it in, and
 # chmod 600 it. Never commit it.
 EnvironmentFile=%h/.config/wdgwars-discord-stats/env
-# Adjust the path if you cloned the repo somewhere else.
-ExecStart=/usr/bin/python3 %h/wdgwars-discord-stats/live_stats_channels.py
+# Adjust the path if you cloned the repo somewhere else. --quiet logs warnings
+# and errors only, so the journal stays clean.
+ExecStart=/usr/bin/python3 %h/wdgwars-discord-stats/live_stats_channels.py --quiet
 Restart=on-failure
 RestartSec=30
 
 [Install]
 WantedBy=default.target
+
+# On a headless box, run `loginctl enable-linger <user>` once so this starts at
+# boot and keeps running after you log out. `--schedule` does this for you.

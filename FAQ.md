@@ -25,9 +25,24 @@ set DISCORD_GUILD_ID=your-server-id
 python live_stats_channels.py --setup
 python live_stats_channels.py
 ```
-(Or use a `.env` file so you don't set variables each time.) To keep it running,
-either leave that window open, or make a **Task Scheduler** task that runs
-`python C:\path\to\live_stats_channels.py --once` every few minutes.
+(Or use a `.env` file so you don't set variables each time.) To keep it running
+in the background, run `python live_stats_channels.py --schedule`: it creates a
+Windows Scheduled Task that runs with `pythonw.exe`, so nothing pops up on your
+screen and it stays quiet. Remove it with `--unschedule`.
+
+### It keeps popping up a console window / how do I run it quietly?
+Use `python live_stats_channels.py --schedule`. On Windows that registers the
+task with `pythonw.exe` (the windowless Python), so no console window appears on
+each run, and it passes `--quiet` so only warnings and errors are logged. On
+Linux/Pi the same command installs a background `systemd` service that logs to
+the journal, not your terminal. If you are running it by hand in a terminal
+instead, add `--quiet` to silence the per-tick log lines.
+
+### Does the auto-run start on its own after a reboot?
+On Linux/Pi, yes: `--schedule` enables lingering so the service comes up at boot.
+On Windows, the Scheduled Task runs while you are logged in (running when logged
+out needs stored credentials, which this tool does not handle, so set that up in
+Task Scheduler yourself if you need it).
 
 ### I don't have a machine to leave running.
 The tool is designed to run locally (your key stays on your machine), but if you

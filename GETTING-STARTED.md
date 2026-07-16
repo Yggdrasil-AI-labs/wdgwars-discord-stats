@@ -54,12 +54,21 @@ Prefer to preview with no writes first? `python live_stats_channels.py --sample 
 
 ## Step 5: keep it updating
 **Meant to run locally**, that's the point, your key and token stay on your own
-machine. Recommended options:
+machine. The easiest way is to let it install a quiet background runner:
+```sh
+python live_stats_channels.py --schedule     # sets up auto-run for your platform
+```
+- **Windows:** a Scheduled Task using `pythonw.exe`, so no console window pops up
+  every few minutes and there is no log spam. Runs while you are logged in.
+- **Linux / Raspberry Pi:** a `systemd --user` service with lingering enabled, so
+  it starts at boot and survives logging out of SSH.
+- Undo any time: `python live_stats_channels.py --unschedule`.
+
+Rather run it by hand?
 ```sh
 python live_stats_channels.py            # run continuously (5-min loop) on any machine
-python live_stats_channels.py --once     # one update; schedule with your own cron/Task Scheduler
+python live_stats_channels.py --once     # one update; point your own cron/Task Scheduler at it
 ```
-- **systemd** (a server/Pi you own): see [`systemd/`](systemd/).
 
 **GitHub Actions is an option if you have no machine at all**: add the three
 values as repo Actions secrets; [`.github/workflows/live-stats.yml`](.github/workflows/live-stats.yml)
