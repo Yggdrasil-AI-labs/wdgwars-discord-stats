@@ -25,10 +25,23 @@ set DISCORD_GUILD_ID=your-server-id
 python live_stats_channels.py --setup
 python live_stats_channels.py
 ```
-(Or use a `.env` file so you don't set variables each time.) To keep it running
-in the background, run `python live_stats_channels.py --schedule`: it creates a
-Windows Scheduled Task that runs with `pythonw.exe`, so nothing pops up on your
-screen and it stays quiet. Remove it with `--unschedule`.
+(Or use a `.env` file so you don't set variables each time.) You don't need a
+separate step to keep it running: `--setup` installs the background auto-updater
+for you as its last step (a windowless Windows Scheduled Task, or a `systemd`
+user service on Linux/Pi). Remove it with `--unschedule`, or reinstall it alone
+with `--schedule`. Pass `--setup --no-schedule` if you'd rather drive updates
+yourself.
+
+### My channels populated once and then went stale.
+On the current version this shouldn't happen from a fresh `--setup`, because
+setup installs the auto-updater automatically (older versions left that as a
+separate `--schedule` step that was easy to forget). To diagnose a stale display:
+look at the **⏱ Updated** channel. If it's frozen, nothing is running the updates,
+reinstall the runner with `python live_stats_channels.py --schedule` (on Windows,
+note the task only runs while you're logged in; on Linux check
+`systemctl --user status wdgwars-live-stats`). If **Updated** is advancing but the
+numbers aren't, check the **API** channel: DOWN means the tool is holding your
+last-good values on purpose and it's a key/API issue, run `--check` to see which.
 
 ### It keeps popping up a console window / how do I run it quietly?
 Use `python live_stats_channels.py --schedule`. On Windows that registers the

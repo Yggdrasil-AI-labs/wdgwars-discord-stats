@@ -91,14 +91,19 @@ three variables instead of using a file.)
 
 ```sh
 python live_stats_channels.py --check   # validate token / server / permissions / key, no changes
-python live_stats_channels.py --setup   # create category + #stats-config + panel, then populate
+python live_stats_channels.py --setup   # create channels + panel, populate, AND install the updater
 ```
 
 `--check` tells you exactly what is wrong if something is off (bad token, bot not
 invited, missing Manage Channels, bad key) with the fix for each. `--setup`
 creates the four section categories (📊 Account, 🖥 Devices, 🌐 Territory,
-⚙ Status), a `#stats-config` mod channel with a pinned control panel, and (if
-your key is set) populates the stat channels. Both are safe to re-run.
+⚙ Status), a `#stats-config` mod channel with a pinned control panel, populates
+the stat channels, and then **installs the auto-updater** so the display keeps
+refreshing (see Step 4). That last part is automatic on purpose: setup alone only
+fills the channels once, and without a running updater they freeze at those first
+values, the most common "my channels went stale" report. Everything is safe to
+re-run. If something else drives updates (GitHub Actions, or a unit you manage by
+hand), pass `--setup --no-schedule` to skip installing the updater.
 
 The `#stats-config` channel is created **private** by default (hidden from
 regular members; server admins still see it, and you toggle from it). Set
@@ -108,29 +113,28 @@ file or `STATS_FIELDS_OFF`.
 
 ### Step 4: keep it updating
 
+**`--setup` already did this for you.** As its last step it installs a quiet,
+boot-persistent background runner for your platform, so the display keeps
+refreshing without a second command. Here is what it set up:
+
+- **Windows:** a Scheduled Task that runs every 5 minutes with `pythonw.exe`, so
+  **no console window pops up** and there is no log spam. It runs while you are
+  logged in.
+- **Linux / Raspberry Pi:** a `systemd --user` service with lingering enabled (so
+  it starts at boot and keeps running after you log out of SSH). Follow it with
+  `journalctl --user -u wdgwars-live-stats -f`.
+- **Anything else:** it prints a `cron` line for you to add with `crontab -e`.
+
 **This is meant to run locally.** It's a small, self-hosted Python script: your
 API key and bot token stay on your own machine and you keep control of it.
 
-**Easiest: let it install itself.** One command sets up a quiet,
-boot-persistent background runner for your platform:
+Undo the runner any time with `python live_stats_channels.py --unschedule`, or
+(re)install it on its own with `python live_stats_channels.py --schedule`. The
+interval comes from `STATS_INTERVAL` (seconds, default 300), so set that before
+setup if you want a different cadence.
 
-```sh
-python live_stats_channels.py --schedule
-```
-
-- **Windows:** creates a Scheduled Task that runs every 5 minutes with
-  `pythonw.exe`, so **no console window pops up** and there is no log spam. It
-  runs while you are logged in.
-- **Linux / Raspberry Pi:** installs a `systemd --user` service, enables
-  lingering (so it starts at boot and keeps running after you log out of SSH),
-  and starts it. Follow it with `journalctl --user -u wdgwars-live-stats -f`.
-- **Anything else:** prints a `cron` line for you to add with `crontab -e`.
-
-Undo it any time with `python live_stats_channels.py --unschedule`. The interval
-comes from `STATS_INTERVAL` (seconds, default 300), so set that before
-`--schedule` if you want a different cadence.
-
-**Prefer to wire it up yourself?** Any of these work too:
+**Prefer to wire it up yourself?** Run `--setup --no-schedule` so it doesn't
+install the runner, then drive updates however you like:
 
 ```sh
 python live_stats_channels.py            # run in the foreground (5-min loop)
@@ -141,7 +145,7 @@ For systemd by hand: copy `.env.example` to
 `~/.config/wdgwars-discord-stats/env` (fill in, `chmod 600`), copy
 `systemd/wdgwars-live-stats.service` to `~/.config/systemd/user/`, run
 `loginctl enable-linger $USER`, then
-`systemctl --user enable --now wdgwars-live-stats.service`. (`--schedule` does
+`systemctl --user enable --now wdgwars-live-stats.service`. (Plain `--setup` does
 all of that for you.)
 
 **GitHub Actions is an option, not the default.** If you genuinely have no
@@ -149,10 +153,11 @@ machine to leave running, fork this repo, add `WDGWARS_API_KEY`,
 `DISCORD_BOT_TOKEN`, and `DISCORD_GUILD_ID` under **Settings → Secrets and
 variables → Actions**, and the included
 [`.github/workflows/live-stats.yml`](.github/workflows/live-stats.yml) updates
-the display every ~10 minutes on GitHub's runners (run `--setup` once locally
-first). Trade-off to be aware of: this puts your key and token in GitHub's
-secret store, they leave your machine. If keeping credentials local matters to
-you, use one of the local options above.
+the display every ~10 minutes on GitHub's runners (run `--setup --no-schedule`
+once locally first so you don't also install a local runner). Trade-off to be
+aware of: this puts your key and token in GitHub's secret store, they leave your
+machine. If keeping credentials local matters to you, use one of the local
+options above.
 
 ### Choosing what to show
 

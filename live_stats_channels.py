@@ -102,7 +102,7 @@ STATE_PATH = os.path.expanduser(
     os.environ.get("STATS_STATE_PATH", "~/.wdgwars-live-stats-state.json"))
 BASE = os.environ.get("WDGWARS_BASE_URL", "https://wdgwars.pl").rstrip("/")
 INTERVAL = int(os.environ.get("STATS_INTERVAL", "300"))
-USER_AGENT = "wdgwars-discord-stats/1.2 (+https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats)"
+USER_AGENT = "wdgwars-discord-stats/1.3 (+https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats)"
 
 # The stat fields, in panel order. Also the set of valid field names.
 FIELD_ORDER = ["User", "Team", "Gang Size", "Gang APs", "Updated", "Total",
@@ -582,11 +582,20 @@ def poll_reactions(cfg: dict) -> bool:
     return changed
 
 
-def setup_discord() -> int:
-    """Create the live-stats category, a mod-config text channel, and a pinned
-    control panel. Idempotent: reuses an existing category/channel by name. The
-    mod-config channel id + panel location are written to the config file so the
-    poller picks them up with no extra environment variables."""
+def setup_discord(install_runner: bool = True) -> int:
+    """Create the section categories, a mod-config text channel, and a pinned
+    control panel, then populate the channels once. Idempotent: reuses existing
+    categories/channels by name. The mod-config channel id + panel location are
+    written to the config file so the poller picks them up with no extra
+    environment variables.
+
+    Unless install_runner is False, setup finishes by installing the
+    boot-persistent auto-updater (the same thing --schedule does), so the display
+    keeps refreshing. Setup alone only populates the channels once; without a
+    running updater they would freeze at the first values, which is the most
+    common "my channels went stale" report. Pass install_runner=False (--setup
+    --no-schedule) when something else drives updates, e.g. GitHub Actions or a
+    hand-managed unit."""
     chs = discord_api("GET", f"/guilds/{GUILD_ID}/channels")
     if not isinstance(chs, list):
         raise SystemExit("could not list guild channels (check the bot token and guild id)")
@@ -653,9 +662,17 @@ def setup_discord() -> int:
 
     print()
     print(f"Setup complete. Config written to {CONFIG_PATH}.")
-    print("Keep it updating with any of:")
-    print("  python live_stats_channels.py            # run continuously (5-min loop)")
-    print("  the systemd unit, or the GitHub Actions workflow (see the README)")
+    if install_runner:
+        print()
+        print("Installing the auto-updater so the display keeps refreshing...")
+        install_schedule()  # so setup never leaves a display that populates once then freezes
+    else:
+        print("Auto-updater NOT installed (--no-schedule). The channels are populated")
+        print("but will freeze until something updates them. Keep them fresh with:")
+        print("  python live_stats_channels.py --schedule   # install it later")
+        print("  python live_stats_channels.py              # or run the loop yourself")
+        print("  or the GitHub Actions workflow (see the README)")
+    print()
     print(f"Change which fields show by reacting on the panel in #{cfg_name}, "
           "or edit the config file.")
     return 0
@@ -986,7 +1003,11 @@ def main() -> int:
     parser.add_argument("--sample", action="store_true",
                         help="use canned stats (no API key, no network)")
     parser.add_argument("--setup", action="store_true",
-                        help="create the category + mod-config channel + panel, then exit")
+                        help="create the section categories + mod-config channel + panel, "
+                             "populate them, and install the auto-updater, then exit")
+    parser.add_argument("--no-schedule", action="store_true",
+                        help="with --setup: skip installing the auto-updater (use when "
+                             "GitHub Actions or a hand-managed unit drives updates)")
     parser.add_argument("--check", action="store_true",
                         help="validate token/server/permissions/key and exit (no changes)")
     parser.add_argument("--schedule", action="store_true",
@@ -1042,7 +1063,7 @@ def main() -> int:
         print_checks(checks)
         if not can_write:
             raise SystemExit("cannot create channels until the issues above are fixed")
-        return setup_discord()
+        return setup_discord(install_runner=not args.no_schedule)
 
     if not args.sample and not WDGO_KEY:
         raise SystemExit("set WDGWARS_API_KEY (or pass --sample)")

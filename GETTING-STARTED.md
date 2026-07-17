@@ -45,24 +45,25 @@ cp .env.example .env    # then edit: WDGWARS_API_KEY, DISCORD_BOT_TOKEN, DISCORD
 ## Step 4: check + build
 ```sh
 python live_stats_channels.py --check   # validates token, server, permissions, key
-python live_stats_channels.py --setup   # creates category + #stats-config + panel, then populates
+python live_stats_channels.py --setup   # creates channels + panel, populates, AND installs the updater
 ```
 `--check` tells you exactly what is wrong if something is off (bad token, bot not
-invited, missing permission, bad key), with the fix. `--setup` is safe to re-run.
+invited, missing permission, bad key), with the fix. `--setup` also installs the
+background auto-updater as its last step, so the display keeps refreshing on its
+own, no separate command. It's safe to re-run.
 
 Prefer to preview with no writes first? `python live_stats_channels.py --sample --dry-run`.
 
 ## Step 5: keep it updating
-**Meant to run locally**, that's the point, your key and token stay on your own
-machine. The easiest way is to let it install a quiet background runner:
-```sh
-python live_stats_channels.py --schedule     # sets up auto-run for your platform
-```
+**`--setup` already handled this.** As its final step it installed a quiet
+background runner for your platform (this is meant to run locally, so your key and
+token stay on your own machine):
 - **Windows:** a Scheduled Task using `pythonw.exe`, so no console window pops up
   every few minutes and there is no log spam. Runs while you are logged in.
 - **Linux / Raspberry Pi:** a `systemd --user` service with lingering enabled, so
   it starts at boot and survives logging out of SSH.
-- Undo any time: `python live_stats_channels.py --unschedule`.
+- Undo any time: `python live_stats_channels.py --unschedule`. Reinstall alone
+  with `--schedule`. Skip it during setup with `--setup --no-schedule`.
 
 Rather run it by hand?
 ```sh

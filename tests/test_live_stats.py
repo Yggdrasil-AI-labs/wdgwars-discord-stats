@@ -288,5 +288,42 @@ class TickApiDownTests(unittest.TestCase):
         self.assertEqual(patched, ["/channels/a"])
 
 
+class SetupSchedulesTests(unittest.TestCase):
+    """Setup installs the auto-updater by default (so a fresh setup never leaves
+    a display that populates once and then freezes), and skips it with
+    --no-schedule."""
+
+    def _run_setup(self, install_runner):
+        import unittest.mock as mock
+
+        def fake_api(method, path, body=None):
+            if method == "GET" and path == "/users/@me":
+                return {"id": "bot"}
+            if method == "GET" and path.endswith("/channels"):
+                return []                 # nothing exists yet -> setup creates it
+            if method == "POST":
+                return {"id": "new"}      # created category / channel / message
+            return {}                     # PATCH / PUT
+
+        with mock.patch.object(m, "discord_api", side_effect=fake_api), \
+                mock.patch.object(m, "install_schedule") as sched, \
+                mock.patch.object(m, "save_json"), \
+                mock.patch.object(m, "load_config", return_value={"fields": {}}), \
+                mock.patch.object(m, "WDGO_KEY", ""), \
+                mock.patch.object(m, "_BOT_ID", None):
+            rc = m.setup_discord(install_runner=install_runner)
+        return rc, sched
+
+    def test_setup_installs_runner_by_default(self):
+        rc, sched = self._run_setup(True)
+        self.assertEqual(rc, 0)
+        sched.assert_called_once()
+
+    def test_setup_no_schedule_skips_runner(self):
+        rc, sched = self._run_setup(False)
+        self.assertEqual(rc, 0)
+        sched.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

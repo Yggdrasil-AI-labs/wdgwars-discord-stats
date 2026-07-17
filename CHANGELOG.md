@@ -4,6 +4,23 @@ All notable changes to wdgwars-discord-stats are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-07-17 - Setup installs the updater
+
+### Changed
+
+- **`--setup` now installs the auto-updater as its last step** (the same runner
+  `--schedule` sets up: a windowless Scheduled Task on Windows, a lingering
+  `systemd --user` service on Linux/Pi, or a printed cron line). Setup alone only
+  populated the channels once, so a display that was set up but never scheduled
+  froze at its first values, the most common "my channels went stale" report.
+  This closes that gap by default.
+
+### Added
+
+- **`--no-schedule`**: pair with `--setup` to skip installing the runner, for
+  when something else drives updates (GitHub Actions, or a hand-managed unit).
+  The standalone `--schedule` / `--unschedule` commands are unchanged.
+
 ## [1.2.0] - 2026-07-17 - Sectioned display
 
 Splits both displays into sections and surfaces the per-rig breakdown as its own
