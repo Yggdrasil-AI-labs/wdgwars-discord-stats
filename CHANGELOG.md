@@ -6,7 +6,8 @@ All notable changes to wdgwars-discord-stats are documented here. Format follows
 
 ## [1.4.1] - 2026-07-17 - Manage Messages for pinning; LXC notes
 
-From a field deployment on a Proxmox LXC.
+From a detailed field report by **Vito**, who deployed on a Proxmox unprivileged
+LXC and wrote up everything he hit. Thanks!
 
 ### Fixed
 
