@@ -41,9 +41,9 @@ bot, Windows, no server, gang stats, and more). The short version is below.
 
 ## Option A: live voice-channel display
 
-The sidebar dashboard. A bot renames voice channels whose names read
-`📊 Total: 273 239`, `📶 WiFi: 67 201`, and so on. The channels are split across
-four category "sections" so the sidebar stays readable:
+The sidebar dashboard. A bot renames voice channels in one "live stats" category
+so their names read `📊 Total: 273 239`, `📶 WiFi: 67 201`, and so on. What's
+shown, grouped into sections:
 
 - **📊 Account** — User, Team, Total, WiFi, BLE, ADS-B, Mesh, Reinforced, Rank
 - **🖥 Devices** — one channel per rig (from the `/api/me` `devices` array), so
@@ -51,10 +51,11 @@ four category "sections" so the sidebar stays readable:
 - **🌐 Territory** — Footprint (total APs owned), gang size, gang APs
 - **⚙ Status** — Updated, Today, Week, Credits, Quota, API health
 
-You choose which fields appear (and can hide the whole Devices section) by
-toggling from a mod channel. `setup` builds the categories, the mod channel, and
-the control panel for you, no manual channel creation. Set `STATS_SECTION_PREFIX`
-if you want to namespace the categories (e.g. `📊 │ wdgo Account`).
+The **control panel** (in the private `#stats-config` channel) is split into one
+pinned message per section, each carrying just that section's toggle reactions, so
+you flip fields on/off section by section. You choose which fields appear (and can
+hide the whole Devices section) that way. `setup` builds the category, the mod
+channel, and the four panel messages for you, no manual channel creation.
 
 ### Step 1: make a Discord bot
 
@@ -101,10 +102,11 @@ python live_stats_channels.py --setup   # create channels + panel, populate, AND
 
 `--check` tells you exactly what is wrong if something is off (bad token, bot not
 invited, missing Manage Channels, bad key) with the fix for each. `--setup`
-creates the four section categories (📊 Account, 🖥 Devices, 🌐 Territory,
-⚙ Status), a `#stats-config` mod channel with a pinned control panel, populates
-the stat channels, and then **installs the auto-updater** so the display keeps
-refreshing (see Step 4). That last part is automatic on purpose: setup alone only
+creates the `📊 │ live stats` category, a `#stats-config` mod channel with one
+pinned control-panel message per section (📊 Account, 🖥 Devices, 🌐 Territory,
+⚙ Status), populates the stat channels, and then **installs the auto-updater** so
+the display keeps refreshing (see Step 4). That last part is automatic on purpose:
+setup alone only
 fills the channels once, and without a running updater they freeze at those first
 values, the most common "my channels went stale" report. Everything is safe to
 re-run. If something else drives updates (GitHub Actions, or a unit you manage by
@@ -168,10 +170,11 @@ options above.
 
 Not everyone wants every number public. Easiest first:
 
-- **React on the panel:** the pinned panel in `#stats-config` has one emoji per
-  field (plus a 🖥 **Devices** toggle that shows/hides the whole per-rig section).
+- **React on the panels:** `#stats-config` has one pinned message per section
+  (📊 Account / 🖥 Devices / 🌐 Territory / ⚙ Status), each with one emoji per field
+  in that section (the 🖥 **Devices** message toggles the whole per-rig section).
   Click an emoji to toggle it on/off. The poller applies it, clears your reaction
-  (so it acts like a button), updates the panel, and adds/removes the matching
+  (so it acts like a button), updates the panels, and adds/removes the matching
   channel(s). (Takes up to one tick, ~5 min, to reflect.)
 - **Config file:** edit `~/.wdgwars-live-stats.json`, e.g. `{"fields": {"BLE": false}}`
   (a field missing from the map is shown).

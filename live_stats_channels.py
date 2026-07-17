@@ -18,8 +18,9 @@ Setup
    is only needed so the #stats-config channel can be created private; without it
    setup still works but that channel is created public). `--check` prints the
    exact invite URL.
-3. The script creates its own section categories (📊 Account, 🖥 Devices,
-   🌐 Territory, ⚙ Status) and manages the voice channels inside them.
+3. The script creates one "live stats" category and manages the voice channels
+   inside it. The mod-config panel is split into per-section messages (📊 Account,
+   🖥 Devices, 🌐 Territory, ⚙ Status), each with its own toggle reactions.
 4. Export the config (never hard-code the token or key):
 
        export WDGWARS_API_KEY="your-64-char-key"
@@ -95,6 +96,9 @@ TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
 WDGO_KEY = os.environ.get("WDGWARS_API_KEY", "").strip()
 GUILD_ID = os.environ.get("DISCORD_GUILD_ID", "").strip()
 OWNER_USERNAME = os.environ.get("STATS_OWNER_USERNAME", "").strip()
+# All stat voice channels live in one category. The config panel (in the private
+# mod channel) is what's split by section, not the voice channels.
+CATEGORY_NAME = os.environ.get("STATS_CATEGORY_NAME", "📊 │ live stats")
 CONFIG_PATH = os.path.expanduser(
     os.environ.get("STATS_CONFIG_PATH", "~/.wdgwars-live-stats.json"))
 # The mod-config channel is an admin surface, so setup hides it from regular
@@ -105,17 +109,18 @@ STATE_PATH = os.path.expanduser(
     os.environ.get("STATS_STATE_PATH", "~/.wdgwars-live-stats-state.json"))
 BASE = os.environ.get("WDGWARS_BASE_URL", "https://wdgwars.pl").rstrip("/")
 INTERVAL = int(os.environ.get("STATS_INTERVAL", "300"))
-USER_AGENT = "wdgwars-discord-stats/1.3 (+https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats)"
+USER_AGENT = "wdgwars-discord-stats/1.4 (+https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats)"
 
 # The stat fields, in panel order. Also the set of valid field names.
 FIELD_ORDER = ["User", "Team", "Gang Size", "Gang APs", "Updated", "Total",
                "WiFi", "BLE", "ADS-B", "Mesh", "Reinforced", "Footprint",
                "Today", "Week", "Credits", "Quota", "Rank", "API"]
 
-# Voice-channel sections. Each is its own Discord category holding a subset of the
-# fields. The Devices section is special: instead of fixed fields it renders one
-# channel per rig from the /api/me `devices` array, and is toggled as a whole via
-# the "Devices" pseudo-field. Order here is the order the categories appear.
+# Sections group the config panel (one message per section in the private mod
+# channel) and set the display order of the voice channels within the single
+# category. The Devices section is special: it has no fixed fields; it renders one
+# voice channel per rig from the /api/me `devices` array and is toggled as a whole
+# via the "Devices" pseudo-field.
 DEVICES_TOGGLE = "Devices"
 SECTIONS = [
     ("Account",   "📊", ["User", "Team", "Total", "WiFi", "BLE", "ADS-B",
@@ -125,25 +130,22 @@ SECTIONS = [
     ("Status",    "⚙", ["Updated", "Today", "Week", "Credits", "Quota", "API"]),
 ]
 SECTION_EMOJI = {name: emoji for name, emoji, _ in SECTIONS}
-# Which section each field lives in, so its channel lands in the right category.
-FIELD_SECTION = {f: name for name, _e, fields in SECTIONS if fields for f in fields}
-# Optional namespace so more than one display can share a server, e.g.
-# STATS_SECTION_PREFIX=wdgo -> "📊 │ wdgo Account".
-SECTION_PREFIX = os.environ.get("STATS_SECTION_PREFIX", "").strip()
 
 
-def section_category_name(name: str) -> str:
-    """Discord category name for a section, e.g. '📊 │ Account'."""
-    label = f"{SECTION_PREFIX} {name}".strip() if SECTION_PREFIX else name
-    return f"{SECTION_EMOJI[name]} │ {label}"
+def section_toggles(section_name: str) -> list:
+    """Panel toggle labels for a section: its fields, or just the whole-section
+    Devices toggle for the Devices section."""
+    for name, _emoji, fields in SECTIONS:
+        if name == section_name:
+            return list(fields) if fields else [DEVICES_TOGGLE]
+    return []
 
 
 def panel_labels() -> list:
-    """Toggle labels for the config panel, in section order, with the Devices
-    section represented by its single whole-section toggle."""
+    """All toggle labels across every section, in order (for env-hide lookups)."""
     out = []
-    for _name, _emoji, fields in SECTIONS:
-        out.extend(fields if fields else [DEVICES_TOGGLE])
+    for name, _emoji, _fields in SECTIONS:
+        out.extend(section_toggles(name))
     return out
 
 
@@ -288,15 +290,16 @@ def field_enabled(cfg: dict, label: str) -> bool:
     return bool(cfg.get("fields", {}).get(label, True))
 
 
-# ── config panel ─────────────────────────────────────────────────────────────
-def render_panel_text(cfg: dict) -> str:
-    lines = ["**live-stats fields** (react with a field's emoji below to "
-             "show/hide it):", ""]
-    for lbl in panel_labels():
+# ── config panel (one message per section) ────────────────────────────────────
+def render_section_panel(section_name: str, cfg: dict) -> str:
+    """The control-panel message for one section: a header plus its field toggles.
+    Posted as its own message in the private mod channel, so the sections are
+    split out there rather than crammed into a single panel."""
+    emoji = SECTION_EMOJI.get(section_name, "•")
+    lines = [f"**{emoji} {section_name}** — react to show/hide:", ""]
+    for lbl in section_toggles(section_name):
         state = "✅ shown " if field_enabled(cfg, lbl) else "⬜ hidden"
         lines.append(f"{REACTION_EMOJI.get(lbl, '•')}  {state}  {lbl}")
-    lines.append("")
-    lines.append("_(one press toggles a field; your reaction clears once applied)_")
     return "\n".join(lines)
 
 
@@ -497,106 +500,115 @@ def label_of(name: str) -> str:
     return parts[1] if len(parts) > 1 else head
 
 
-def reconcile_sections(active_by_section):
-    """Make each section's category hold exactly the voice channels in
-    active_by_section[section] (a {label: channel_name} map, in display order).
-    Creates missing channels and deletes stale ones. Categories are created by
-    --setup, not here; a missing section category is skipped with a warning.
-    Deletion is scoped: fixed sections only remove their own known fields (a
-    manually-added channel is left alone); the tool-owned Devices category is
-    managed fully. Returns {(section, label): channel}."""
+def reconcile_channels(active):
+    """Make the single stats category hold exactly the voice channels in `active`
+    ({label: channel_name}, in display order). Creates missing channels and
+    deletes stale ones. A channel is 'ours' to manage if its label is a known
+    field or it is a device channel (🖥-prefixed name); a manually-added channel
+    is left alone. Returns {label: channel}."""
     chs = discord_api("GET", f"/guilds/{GUILD_ID}/channels") or []
-    cats = {c["name"]: c for c in chs if c["type"] == 4}
-    result = {}
-    for name, _emoji, fields in SECTIONS:
-        active = active_by_section.get(name) or {}
-        cat = cats.get(section_category_name(name))
-        if not cat:
-            if active:
-                log.warning("section category %r not found (run --setup)",
-                            section_category_name(name))
+    cat = next((c for c in chs if c["type"] == 4 and c["name"] == CATEGORY_NAME), None)
+    if not cat:
+        log.error("category %r not found in guild (run --setup)", CATEGORY_NAME)
+        return {}
+    present = {label_of(c["name"]): c for c in chs
+               if c["type"] == 2 and c.get("parent_id") == cat["id"]}
+    for lbl, ch in list(present.items()):
+        ours = lbl in FIELD_ORDER or ch["name"].startswith("🖥 ")
+        if ours and lbl not in active:
+            if discord_api("DELETE", f"/channels/{ch['id']}") is not None:
+                log.info("removed %r channel", lbl)
+            present.pop(lbl, None)
+    for pos, lbl in enumerate(active):
+        if lbl not in present:
+            # device channels are created with their 🖥 name up front so they're
+            # recognized as ours even before the first rename; fields start bare.
+            init_name = lbl if lbl in FIELD_ORDER else active[lbl]
+            created = discord_api("POST", f"/guilds/{GUILD_ID}/channels", {
+                "name": init_name, "type": 2, "parent_id": cat["id"], "position": pos,
+            })
+            if created:
+                present[lbl] = created
+                log.info("added %r channel", lbl)
+    return present
+
+
+def add_panel_reactions(channel_id: str, message_id: str, labels) -> None:
+    """Put one clickable reaction on a section message for each of `labels`
+    (idempotent)."""
+    for lbl in labels:
+        emoji = REACTION_EMOJI.get(lbl)
+        if not emoji:
             continue
-        managed = set(fields) if fields else None  # None => Devices: manage all
-        present = {label_of(c["name"]): c for c in chs
-                   if c["type"] == 2 and c.get("parent_id") == cat["id"]}
-        for lbl, ch in list(present.items()):
-            if lbl not in active and (managed is None or lbl in managed):
-                if discord_api("DELETE", f"/channels/{ch['id']}") is not None:
-                    log.info("removed %r from %s", lbl, name)
-                present.pop(lbl, None)
-        for pos, lbl in enumerate(active):
-            if lbl not in present:
-                created = discord_api("POST", f"/guilds/{GUILD_ID}/channels", {
-                    "name": lbl, "type": 2, "parent_id": cat["id"], "position": pos,
-                })
-                if created:
-                    present[lbl] = created
-                    log.info("added %r to %s", lbl, name)
-        for lbl, ch in present.items():
-            result[(name, lbl)] = ch
-    return result
-
-
-def update_panel(cfg: dict) -> None:
-    """Edit the pinned control panel to reflect the current field state. Reposts
-    and re-pins if the stored message was deleted. No-op if setup never ran."""
-    panel = cfg.get("panel") or {}
-    ch, msg = panel.get("channel_id"), panel.get("message_id")
-    if not ch:
-        return
-    body = {"content": render_panel_text(cfg)}
-    if msg and discord_api("PATCH", f"/channels/{ch}/messages/{msg}", body) is not None:
-        return
-    new = discord_api("POST", f"/channels/{ch}/messages", body)
-    if new:
-        discord_api("PUT", f"/channels/{ch}/pins/{new['id']}")
-        cfg.setdefault("panel", {})["message_id"] = new["id"]
-        save_json(CONFIG_PATH, cfg)
-        add_panel_reactions(ch, new["id"])
-
-
-def add_panel_reactions(channel_id: str, message_id: str) -> None:
-    """Put one clickable reaction per field on the panel message (idempotent)."""
-    for emoji in REACTION_EMOJI.values():
         enc = urllib.parse.quote(emoji)
         discord_api("PUT",
                     f"/channels/{channel_id}/messages/{message_id}/reactions/{enc}/@me")
 
 
-def poll_reactions(cfg: dict) -> bool:
-    """Toggle any field whose reaction a user pressed on the panel, then clear
-    that reaction so it acts like a button. Returns True if the config changed."""
+def update_panel(cfg: dict) -> None:
+    """Edit each section's pinned control-panel message to reflect the current
+    field state. Reposts and re-pins any that were deleted. No-op if setup never
+    ran. Panel layout: {channel_id, messages: {section: message_id}}."""
     panel = cfg.get("panel") or {}
-    ch, msg = panel.get("channel_id"), panel.get("message_id")
-    if not (ch and msg):
+    ch = panel.get("channel_id")
+    if not ch:
+        return
+    msgs = panel.setdefault("messages", {})
+    dirty = False
+    for name, _emoji, _fields in SECTIONS:
+        body = {"content": render_section_panel(name, cfg)}
+        mid = msgs.get(name)
+        if mid and discord_api("PATCH", f"/channels/{ch}/messages/{mid}", body) is not None:
+            continue
+        new = discord_api("POST", f"/channels/{ch}/messages", body)
+        if new:
+            discord_api("PUT", f"/channels/{ch}/pins/{new['id']}")
+            msgs[name] = new["id"]
+            add_panel_reactions(ch, new["id"], section_toggles(name))
+            dirty = True
+    if dirty:
+        save_json(CONFIG_PATH, cfg)
+
+
+def poll_reactions(cfg: dict) -> bool:
+    """Toggle any field whose reaction a user pressed on a section panel, then
+    clear that reaction so it acts like a button. Returns True if config changed."""
+    panel = cfg.get("panel") or {}
+    ch = panel.get("channel_id")
+    msgs = panel.get("messages") or {}
+    if not (ch and msgs):
         return False
-    # One read per tick: pull the message and look at reaction counts. The bot's
-    # own button counts as 1; a user press makes it >= 2. Only then do we spend
-    # calls fetching who reacted. Keeps steady-state API traffic to ~1 call/tick.
-    message = discord_api("GET", f"/channels/{ch}/messages/{msg}")
-    if not isinstance(message, dict):
-        return False
-    counts = {r.get("emoji", {}).get("name"): r.get("count", 0)
-              for r in message.get("reactions", [])}
     me_id = bot_id()
     changed = False
-    for label, emoji in REACTION_EMOJI.items():
-        if counts.get(emoji, 0) < 2:
+    for name, _emoji, _fields in SECTIONS:
+        mid = msgs.get(name)
+        if not mid:
             continue
-        enc = urllib.parse.quote(emoji)
-        users = discord_api(
-            "GET", f"/channels/{ch}/messages/{msg}/reactions/{enc}?limit=20")
-        pressers = ([u for u in users if isinstance(u, dict) and u.get("id") != me_id]
-                    if isinstance(users, list) else [])
-        if not pressers:
+        # One read per section message: the bot's own button counts as 1; a user
+        # press makes a reaction's count >= 2. Only then do we fetch who pressed.
+        message = discord_api("GET", f"/channels/{ch}/messages/{mid}")
+        if not isinstance(message, dict):
             continue
-        cfg.setdefault("fields", {})[label] = not field_enabled(cfg, label)
-        changed = True
-        log.info("toggled %r -> %s via reaction", label, cfg["fields"][label])
-        for u in pressers:
-            discord_api(
-                "DELETE",
-                f"/channels/{ch}/messages/{msg}/reactions/{enc}/{u['id']}")
+        counts = {r.get("emoji", {}).get("name"): r.get("count", 0)
+                  for r in message.get("reactions", [])}
+        for label in section_toggles(name):
+            emoji = REACTION_EMOJI.get(label)
+            if not emoji or counts.get(emoji, 0) < 2:
+                continue
+            enc = urllib.parse.quote(emoji)
+            users = discord_api(
+                "GET", f"/channels/{ch}/messages/{mid}/reactions/{enc}?limit=20")
+            pressers = ([u for u in users if isinstance(u, dict) and u.get("id") != me_id]
+                        if isinstance(users, list) else [])
+            if not pressers:
+                continue
+            cfg.setdefault("fields", {})[label] = not field_enabled(cfg, label)
+            changed = True
+            log.info("toggled %r -> %s via reaction", label, cfg["fields"][label])
+            for u in pressers:
+                discord_api(
+                    "DELETE",
+                    f"/channels/{ch}/messages/{mid}/reactions/{enc}/{u['id']}")
     if changed:
         save_json(CONFIG_PATH, cfg)
         update_panel(cfg)
@@ -621,22 +633,18 @@ def setup_discord(install_runner: bool = True) -> int:
     if not isinstance(chs, list):
         raise SystemExit("could not list guild channels (check the bot token and guild id)")
 
-    # One category per section (📊 Account, 🖥 Devices, 🌐 Territory, ⚙ Status).
+    # One category holds every stat voice channel (the split is in the panel).
     existing_cats = {c["name"]: c for c in chs if c["type"] == 4}
-    section_cats = {}
-    for name, _emoji, _fields in SECTIONS:
-        cat_name = section_category_name(name)
-        cat = existing_cats.get(cat_name)
-        if cat:
-            print(f"section category exists: {cat_name} ({cat['id']})")
-        else:
-            cat = discord_api("POST", f"/guilds/{GUILD_ID}/channels",
-                              {"name": cat_name, "type": 4})
-            if not cat:
-                raise SystemExit(f"failed to create the {name} category")
-            print(f"created section category: {cat_name} ({cat['id']})")
-        section_cats[name] = cat
-    parent_id = section_cats["Account"]["id"]
+    cat = existing_cats.get(CATEGORY_NAME)
+    if cat:
+        print(f"category exists: {CATEGORY_NAME} ({cat['id']})")
+    else:
+        cat = discord_api("POST", f"/guilds/{GUILD_ID}/channels",
+                          {"name": CATEGORY_NAME, "type": 4})
+        if not cat:
+            raise SystemExit("failed to create the live-stats category")
+        print(f"created category: {CATEGORY_NAME} ({cat['id']})")
+    parent_id = cat["id"]
 
     cfg_name = os.environ.get("STATS_CONFIG_CHANNEL_NAME", "stats-config")
     ow = config_overwrites()
@@ -684,18 +692,25 @@ def setup_discord(install_runner: bool = True) -> int:
             raise SystemExit("failed to create the mod-config channel")
 
     cfg = load_config()
-    body = {"content": render_panel_text(cfg)}
-    existing = cfg.get("panel") or {}
-    pid = existing.get("message_id") if existing.get("channel_id") == modch["id"] else None
-    if pid and discord_api("PATCH", f"/channels/{modch['id']}/messages/{pid}", body) is not None:
-        add_panel_reactions(modch["id"], pid)  # reuse existing panel
-    else:
-        panel = discord_api("POST", f"/channels/{modch['id']}/messages", body)
-        if panel:
-            discord_api("PUT", f"/channels/{modch['id']}/pins/{panel['id']}")
-            cfg["panel"] = {"channel_id": modch["id"], "message_id": panel["id"]}
-            add_panel_reactions(modch["id"], panel["id"])
+    panel = cfg.setdefault("panel", {})
+    if panel.get("channel_id") != modch["id"]:
+        panel["messages"] = {}          # channel changed -> old message ids are stale
+    panel["channel_id"] = modch["id"]
+    panel.pop("message_id", None)       # drop the pre-split single-panel field
+    msgs = panel.setdefault("messages", {})
+    for name, _emoji, _fields in SECTIONS:
+        body = {"content": render_section_panel(name, cfg)}
+        mid = msgs.get(name)
+        if mid and discord_api("PATCH", f"/channels/{modch['id']}/messages/{mid}", body) is not None:
+            add_panel_reactions(modch["id"], mid, section_toggles(name))
+        else:
+            m = discord_api("POST", f"/channels/{modch['id']}/messages", body)
+            if m:
+                discord_api("PUT", f"/channels/{modch['id']}/pins/{m['id']}")
+                msgs[name] = m["id"]
+                add_panel_reactions(modch["id"], m["id"], section_toggles(name))
     save_json(CONFIG_PATH, cfg)
+    print(f"posted {len(msgs)} section panels to #{cfg_name}")
 
     if WDGO_KEY:
         print("populating stat channels...")
@@ -737,15 +752,25 @@ def active_sections(cfg: dict, stats: dict, devices: dict) -> dict:
     return by
 
 
+def active_channels(cfg: dict, stats: dict, devices: dict) -> dict:
+    """Flat {label: channel_name} for the single category, honoring visibility,
+    in section order (Account fields, then per-rig device channels, then Territory,
+    then Status)."""
+    by = active_sections(cfg, stats, devices)
+    active = {}
+    for name, _emoji, _fields in SECTIONS:
+        active.update(by[name])
+    return active
+
+
 def _refresh_api_channel(api_name: str) -> None:
-    """Rename only the API-status channel (in the Status section). Used when
-    WDGoWars is down so the status flips to DOWN without touching the data
-    channels. No-op if the field is hidden or the category/channel is absent."""
+    """Rename only the API-status channel. Used when WDGoWars is down so the
+    status flips to DOWN without touching the data channels. No-op if the field
+    is hidden or the category/channel is absent."""
     if not api_name:
         return
     chs = discord_api("GET", f"/guilds/{GUILD_ID}/channels") or []
-    target = section_category_name("Status")
-    cat = next((c for c in chs if c["type"] == 4 and c["name"] == target), None)
+    cat = next((c for c in chs if c["type"] == 4 and c["name"] == CATEGORY_NAME), None)
     if not cat:
         return
     for c in chs:
@@ -762,58 +787,56 @@ def tick(state: dict, sample: bool = False) -> None:
 
     t = state.get("tick", 0)
     stats, devices, api_ok = gather_stats(sample=sample)
-    by = active_sections(cfg, stats, devices)
+    active = active_channels(cfg, stats, devices)
 
     # When WDGoWars is unreachable its counts fall back to zero. Don't repaint
     # the whole dashboard with 0s over good numbers: flip only the API channel
     # to DOWN and leave the data channels showing their last good values.
     if not sample and not api_ok:
-        _refresh_api_channel(by.get("Status", {}).get("API"))
+        _refresh_api_channel(active.get("API"))
         state["tick"] = t + 1
         state["updated_iso"] = datetime.now(timezone.utc).isoformat()
         save_json(STATE_PATH, state)
         log.warning("tick %d: WDGoWars API down, left data channels unchanged", t)
         return
 
-    channels = reconcile_sections(by)
+    channels = reconcile_channels(active)
     if not channels:
         return
-    changes = total = 0
+    changes = 0
     # Rename only when the value actually changed (the channel name already
     # carries the last value), which keeps well inside Discord's rename rate
     # limit. The Updated field changes with the clock, so it refreshes on its own.
-    for name, _emoji, _fields in SECTIONS:
-        for lbl, new_name in by[name].items():
-            total += 1
-            ch = channels.get((name, lbl))
-            if not ch or ch["name"] == new_name:
-                continue
-            if discord_api("PATCH", f"/channels/{ch['id']}", {"name": new_name}) is not None:
-                changes += 1
+    for lbl, new_name in active.items():
+        ch = channels.get(lbl)
+        if not ch or ch["name"] == new_name:
+            continue
+        if discord_api("PATCH", f"/channels/{ch['id']}", {"name": new_name}) is not None:
+            changes += 1
     state["tick"] = t + 1
-    state["prev_raw"] = {f"{name}:{lbl}": v
-                         for name in by for lbl, v in by[name].items()}
+    state["prev_raw"] = active
     state["updated_iso"] = datetime.now(timezone.utc).isoformat()
     save_json(STATE_PATH, state)
-    log.info("tick %d: %d/%d channels updated", t, changes, total)
+    log.info("tick %d: %d/%d channels updated", t, changes, len(active))
 
 
 def dry_run(sample: bool) -> int:
     cfg = load_config()
     stats, devices, _ = gather_stats(sample=sample)
-    print("sections (✅ shown, ⬜ hidden by config):")
-    for name, _emoji, fields in SECTIONS:
-        print(f"\n{section_category_name(name)}")
+    print(f"category: {CATEGORY_NAME!r}  (all channels; panel is split by section)")
+    print("channels (✅ shown, ⬜ hidden by config), grouped by panel section:")
+    for name, emoji, fields in SECTIONS:
+        print(f"\n  {emoji} {name}")
         if fields is None:
             mark = "✅" if field_enabled(cfg, DEVICES_TOGGLE) else "⬜"
             if not devices:
-                print(f"  {mark} 🖥 (no rigs reported)")
+                print(f"    {mark} 🖥 (no rigs reported)")
             for val in devices.values():
-                print(f"  {mark} {val}")
+                print(f"    {mark} {val}")
         else:
             for lbl in fields:
                 mark = "✅" if field_enabled(cfg, lbl) else "⬜"
-                print(f"  {mark} {stats.get(lbl, '(missing)')}")
+                print(f"    {mark} {stats.get(lbl, '(missing)')}")
     return 0
 
 

@@ -81,8 +81,9 @@ your key and token to GitHub's secret store, they leave your machine. Prefer a
 local option if that matters to you.
 
 ## Step 6: choose what to show
-- **React on the panel:** the pinned panel in `#stats-config` has an emoji per
-  field, click one to toggle that field on/off. Applies on the next tick (~5 min).
+- **React on the panels:** `#stats-config` has one pinned message per section
+  (📊 Account / 🖥 Devices / 🌐 Territory / ⚙ Status), each with an emoji per field;
+  click one to toggle that field. Applies on the next tick (~5 min).
 - **Config file:** `~/.wdgwars-live-stats.json`, e.g. `{"fields": {"BLE": false}}`.
 - **Env var** (for GitHub Actions): `STATS_FIELDS_OFF=BLE,Rank`.
 

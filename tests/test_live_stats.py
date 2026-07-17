@@ -122,22 +122,34 @@ class DeviceChannelsTests(unittest.TestCase):
 
 
 class SectionsTests(unittest.TestCase):
-    def test_category_name_and_prefix(self):
-        self.assertEqual(m.section_category_name("Account"), "📊 │ Account")
-        orig = m.SECTION_PREFIX
-        try:
-            m.SECTION_PREFIX = "wdgo"
-            self.assertEqual(m.section_category_name("Devices"), "🖥 │ wdgo Devices")
-        finally:
-            m.SECTION_PREFIX = orig
+    def test_section_toggles(self):
+        self.assertEqual(m.section_toggles("Devices"), ["Devices"])
+        self.assertIn("Footprint", m.section_toggles("Territory"))
+        self.assertIn("API", m.section_toggles("Status"))
+        self.assertEqual(m.section_toggles("Nope"), [])
 
-    def test_panel_labels_include_devices_toggle(self):
+    def test_panel_labels_cover_every_field_plus_devices(self):
         labels = m.panel_labels()
-        self.assertIn("Devices", labels)
+        self.assertIn("Devices", labels)  # whole-section toggle
         self.assertIn("Footprint", labels)
         self.assertIn("API", labels)
-        # every fixed field is assigned to exactly one section
-        self.assertEqual(sorted(m.FIELD_SECTION), sorted(m.FIELD_ORDER))
+        fixed = [x for x in labels if x != "Devices"]
+        self.assertEqual(sorted(fixed), sorted(m.FIELD_ORDER))
+
+    def test_active_channels_flattens_in_section_order(self):
+        stats = {"Total": "📊 Total: 1", "API": "🔌 API: UP",
+                 "Footprint": "🗺 Footprint: 5 APs"}
+        devices = {"Cardputer": "🖥 Cardputer: 1 nets"}
+        active = m.active_channels({"fields": {"API": False, "Devices": True}},
+                                   stats, devices)
+        self.assertIn("Total", active)        # Account, shown
+        self.assertNotIn("API", active)       # Status, hidden
+        self.assertIn("Footprint", active)    # Territory
+        self.assertIn("Cardputer", active)    # Devices
+        keys = list(active)
+        # section order: Account -> Devices -> Territory
+        self.assertLess(keys.index("Total"), keys.index("Cardputer"))
+        self.assertLess(keys.index("Cardputer"), keys.index("Footprint"))
 
     def test_active_sections_places_and_gates_fields(self):
         stats = {"Total": "t", "API": "a", "Footprint": "f"}
@@ -160,11 +172,12 @@ class FieldVisibilityTests(unittest.TestCase):
         self.assertFalse(m.field_enabled(cfg, "BLE"))
         self.assertTrue(m.field_enabled(cfg, "WiFi"))  # missing = shown
 
-    def test_render_panel_lists_fields(self):
-        text = m.render_panel_text({"fields": {}})
-        self.assertIn("live-stats fields", text)
+    def test_render_section_panel(self):
+        text = m.render_section_panel("Account", {"fields": {}})
+        self.assertIn("Account", text)
         self.assertIn("Total", text)
         self.assertIn("BLE", text)
+        self.assertIn("Devices", m.render_section_panel("Devices", {"fields": {}}))
 
 
 class ScrubTests(unittest.TestCase):
@@ -257,10 +270,9 @@ class DiscordApiTests(unittest.TestCase):
 class TickApiDownTests(unittest.TestCase):
     def test_api_down_tick_refreshes_only_api_channel(self):
         import unittest.mock as mock
-        # API lives in the Status section now; the down-path only touches that.
-        status_cat = m.section_category_name("Status")
+        # Single category now; the down-path only renames the API channel in it.
         channels = [
-            {"type": 4, "name": status_cat, "id": "cat"},
+            {"type": 4, "name": m.CATEGORY_NAME, "id": "cat"},
             {"type": 2, "name": "\U0001f7e2 API: UP (5ms)", "parent_id": "cat", "id": "a"},
             {"type": 2, "name": "\U0001f4ca Total: 999", "parent_id": "cat", "id": "t"},
         ]

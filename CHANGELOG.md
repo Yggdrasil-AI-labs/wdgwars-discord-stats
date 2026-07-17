@@ -4,6 +4,29 @@ All notable changes to wdgwars-discord-stats are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-07-17 - Split the panel, not the voice channels
+
+The v1.2 "split into sections" put the split in the wrong place (four voice
+categories). The split belongs in the private config channel.
+
+### Changed
+
+- **Voice channels are back in a single `📊 │ live stats` category** (configurable
+  via `STATS_CATEGORY_NAME`), including the per-rig Devices channels and Footprint.
+  The four-category layout is gone; `STATS_SECTION_PREFIX` is removed.
+- **The control panel is now split by section:** `#stats-config` gets one pinned
+  message per section (📊 Account, 🖥 Devices, 🌐 Territory, ⚙ Status), each
+  carrying only that section's toggle reactions, instead of a single all-in-one
+  panel. `poll_reactions`/`update_panel` handle the four messages; the panel
+  config is now `{channel_id, messages: {section: message_id}}` (a pre-split
+  single-panel `message_id` is migrated on the next `--setup`).
+
+### Notes
+
+- `--setup` is idempotent and migrates an existing display: it reuses the single
+  category and re-posts the per-section panels. If you're coming from v1.2/1.3's
+  four categories, delete the now-empty extra categories by hand.
+
 ## [1.3.1] - 2026-07-17 - Graceful private-channel fallback
 
 ### Fixed
