@@ -338,11 +338,13 @@ class SetupSchedulesTests(unittest.TestCase):
 
 
 class InviteTests(unittest.TestCase):
-    def test_invite_url_requests_manage_channels_and_roles(self):
+    def test_invite_url_requests_channels_roles_and_messages(self):
         url = m.invite_url("123")
         self.assertIn("client_id=123", url)
         self.assertIn(f"permissions={m.INVITE_PERMS}", url)
-        self.assertEqual(m.INVITE_PERMS, 0x10 | 0x10000000)
+        # Manage Channels + Manage Messages + Manage Roles
+        self.assertEqual(m.INVITE_PERMS, 0x10 | 0x2000 | 0x10000000)
+        self.assertEqual(m.INVITE_PERMS, 268443664)
 
 
 class SetupPrivateFallbackTests(unittest.TestCase):

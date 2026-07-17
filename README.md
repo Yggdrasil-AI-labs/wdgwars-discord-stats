@@ -65,17 +65,20 @@ Only a human can do this part; everything after is one command.
 2. Left sidebar → **Bot** → **Reset Token** → **Copy**. That is your `DISCORD_BOT_TOKEN`.
 3. Invite the bot to your server. Paste this URL in your browser, replacing
    `YOUR_CLIENT_ID` with the **Application ID** from the **General Information**
-   page (`permissions=268435472` is **Manage Channels + Manage Roles**):
+   page (`permissions=268443664` is **Manage Channels + Manage Roles + Manage
+   Messages**):
 
    ```
-   https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&scope=bot&permissions=268435472
+   https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&scope=bot&permissions=268443664
    ```
-   Pick your server and authorize. Manage Channels is the core permission;
-   Manage Roles is only needed so the `#stats-config` channel can be created
-   **private**. If you'd rather grant only Manage Channels (`permissions=16`),
-   setup still works, but `#stats-config` is created public (or set
-   `STATS_CONFIG_PRIVATE=off` to skip privacy entirely). `--check` prints the
-   right invite URL for your bot.
+   Pick your server and authorize. Only **Manage Channels** is strictly required
+   (it creates the stat channels). **Manage Roles** lets setup make `#stats-config`
+   **private**; **Manage Messages** lets it **pin** the section panels. Without
+   those two, setup still completes — the config channel is just public and the
+   panels are unpinned (or set `STATS_CONFIG_PRIVATE=off` to skip privacy). If you
+   see a `403 / Missing Permissions` on a `pins` call, that's Manage Messages
+   missing; on a channel-create it's Manage Roles. `--check` prints the right
+   invite URL and flags any missing permission before you run setup.
 4. Get your server id: Discord → Settings → Advanced → turn on **Developer Mode**,
    then right-click your server icon → **Copy Server ID**.
 

@@ -113,16 +113,42 @@ entirely, delete it, the display keeps working and you change fields via the
 config file or `STATS_FIELDS_OFF`. Or never create it: `STATS_CONFIG_PRIVATE`
 controls visibility; deleting the channel after setup is fine.
 
-### Setup couldn't make `#stats-config` private (permission error).
-Making a channel private means writing permission overwrites, which Discord only
-lets a bot do if it has the **Manage Roles** permission, on top of Manage
-Channels. The classic symptom: the categories and channels create fine, but the
-private `#stats-config` fails. Setup now handles this gracefully, it creates the
-channel **public** and tells you so, rather than aborting. To get it private,
-either re-invite the bot with Manage Roles (`--check` prints the exact invite
-URL, `permissions=268435472`) and re-run `--setup`, or do what works without any
-extra bot permission: set the channel private by hand in Discord and grant the
-bot access to it. Set `STATS_CONFIG_PRIVATE=off` if you don't care about privacy.
+### I get `403 Missing Permissions` during setup.
+There are **two different** permission 403s, easy to conflate because Discord
+returns the same code (`50013`) for both:
+
+- **On a channel create** (making `#stats-config` private): that needs **Manage
+  Roles** (writing a permission overwrite), on top of Manage Channels. Setup
+  handles it gracefully now, it creates the channel **public** and tells you so
+  rather than aborting.
+- **On a `pins/...` call** (pinning the section panels): that needs **Manage
+  Messages**. Setup posts the panels anyway (they still work), just unpinned.
+
+Fix both by re-inviting the bot with all three permissions (`--check` prints the
+exact URL, `permissions=268443664` = Manage Channels + Manage Roles + Manage
+Messages) and re-running `--setup`, or grant the missing role bits in Server
+Settings → Roles. Alternatives that need no extra permission: set the channel
+private by hand and give the bot access, or `STATS_CONFIG_PRIVATE=off` to skip
+privacy entirely (the panels being unpinned is harmless either way).
+
+### Running on Proxmox / in an LXC container? `--schedule` fails or `systemctl --user` can't find the bus.
+`--schedule` installs a `systemd --user` service, which needs a working user
+session bus. In an **unprivileged Proxmox LXC** that often isn't up out of the
+box. What's been reported to work:
+
+1. On the host, enable nesting: `pct set <ctid> --features nesting=1` (restart the
+   container). Proxmox even warns about this at creation time.
+2. In the container: `apt install -y dbus-user-session` and
+   `loginctl enable-linger <user>`.
+3. `pct enter` doesn't create a real login session, so `$XDG_RUNTIME_DIR` isn't
+   set and `systemctl --user` can't find the bus even when it's running. Export it:
+   `export XDG_RUNTIME_DIR=/run/user/$(id -u)` (persist it in `~/.bashrc`), or just
+   connect over SSH/console instead of `pct enter`.
+
+Also, in this setup the service logs land in the **system** journal, so
+`journalctl --user -u wdgwars-live-stats` may show nothing; use
+`journalctl -u wdgwars-live-stats -f` (no `--user`). None of this is the script,
+it's the container's session plumbing.
 
 ### How do I hide/show fields?
 React to a field's emoji on the pinned panel in `#stats-config`, edit

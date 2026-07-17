@@ -14,10 +14,11 @@ Setup
 -----
 1. Get your WDGoWars API key from https://wdgwars.pl/profile
 2. Create a Discord bot (https://discord.com/developers/applications), copy its
-   token, and invite it with "Manage Channels" plus "Manage Roles" (Manage Roles
-   is only needed so the #stats-config channel can be created private; without it
-   setup still works but that channel is created public). `--check` prints the
-   exact invite URL.
+   token, and invite it with "Manage Channels" + "Manage Roles" + "Manage
+   Messages". Only Manage Channels is strictly required; Manage Roles lets setup
+   make #stats-config private, and Manage Messages lets it pin the section panels.
+   Without the latter two, setup still works (public config channel, unpinned
+   panels). `--check` prints the exact invite URL.
 3. The script creates one "live stats" category and manages the voice channels
    inside it. The mod-config panel is split into per-section messages (📊 Account,
    🖥 Devices, 🌐 Territory, ⚙ Status), each with its own toggle reactions.
@@ -210,19 +211,22 @@ def bot_id() -> str:
     return _BOT_ID
 
 
-# Discord permission bits. Manage Channels creates/renames/deletes channels;
-# Manage Roles is ADDITIONALLY required to create a channel with permission
-# overwrites (what makes #stats-config private). The invite offers both so the
-# private config channel works out of the box; setup falls back to a public
-# channel if only Manage Channels was granted.
+# Discord permission bits and what each is for here:
+#   Manage Channels  — create/rename/delete the stat voice channels (required).
+#   Manage Roles     — set the overwrite that makes #stats-config private.
+#   Manage Messages  — pin the section panels in #stats-config.
+# The invite requests all three so setup works cleanly out of the box; a missing
+# one degrades gracefully (public config channel, and/or unpinned panels).
 PERM_ADMIN = 0x8
 PERM_MANAGE_CHANNELS = 0x10
+PERM_MANAGE_MESSAGES = 0x2000
 PERM_MANAGE_ROLES = 0x10000000
-INVITE_PERMS = PERM_MANAGE_CHANNELS | PERM_MANAGE_ROLES  # 268435472
+INVITE_PERMS = (PERM_MANAGE_CHANNELS | PERM_MANAGE_MESSAGES
+                | PERM_MANAGE_ROLES)  # 268443664
 
 
 def invite_url(client_id: str) -> str:
-    """Bot invite URL requesting Manage Channels + Manage Roles."""
+    """Bot invite URL requesting Manage Channels + Manage Messages + Manage Roles."""
     return (f"https://discord.com/oauth2/authorize?client_id={client_id}"
             f"&scope=bot&permissions={INVITE_PERMS}")
 
@@ -545,6 +549,15 @@ def add_panel_reactions(channel_id: str, message_id: str, labels) -> None:
                     f"/channels/{channel_id}/messages/{message_id}/reactions/{enc}/@me")
 
 
+def _pin_message(channel_id: str, message_id: str) -> None:
+    """Pin a panel message. Pinning needs Manage Messages; if the bot lacks it the
+    message still works (just unpinned), so log a hint rather than treating it as
+    a failure."""
+    if discord_api("PUT", f"/channels/{channel_id}/pins/{message_id}") is None:
+        log.info("couldn't pin a panel message (bot needs Manage Messages to pin); "
+                 "the panel still works unpinned")
+
+
 def update_panel(cfg: dict) -> None:
     """Edit each section's pinned control-panel message to reflect the current
     field state. Reposts and re-pins any that were deleted. No-op if setup never
@@ -562,7 +575,7 @@ def update_panel(cfg: dict) -> None:
             continue
         new = discord_api("POST", f"/channels/{ch}/messages", body)
         if new:
-            discord_api("PUT", f"/channels/{ch}/pins/{new['id']}")
+            _pin_message(ch, new["id"])
             msgs[name] = new["id"]
             add_panel_reactions(ch, new["id"], section_toggles(name))
             dirty = True
@@ -706,7 +719,7 @@ def setup_discord(install_runner: bool = True) -> int:
         else:
             m = discord_api("POST", f"/channels/{modch['id']}/messages", body)
             if m:
-                discord_api("PUT", f"/channels/{modch['id']}/pins/{m['id']}")
+                _pin_message(modch["id"], m["id"])
                 msgs[name] = m["id"]
                 add_panel_reactions(modch["id"], m["id"], section_toggles(name))
     save_json(CONFIG_PATH, cfg)
@@ -888,6 +901,15 @@ def preflight():
                        "bot lacks Manage Roles, so #stats-config can't be made "
                        "private automatically; setup will create it public. Grant "
                        f"Manage Roles (re-invite) to fix, or set STATS_CONFIG_PRIVATE=off. {invite}"))
+
+    # Manage Messages only affects whether the section panels get pinned. Not
+    # fatal (they still work unpinned), so this is a heads-up too.
+    has_msgs = bool(is_admin or perms & PERM_MANAGE_MESSAGES)
+    checks.append((has_msgs,
+                   "bot has Manage Messages (can pin the section panels)"
+                   if has_msgs else
+                   "bot lacks Manage Messages, so the section panels post but won't "
+                   f"be pinned. Grant Manage Messages (re-invite) to fix. {invite}"))
 
     key_ok = None
     if WDGO_KEY:

@@ -4,6 +4,28 @@ All notable changes to wdgwars-discord-stats are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.1] - 2026-07-17 - Manage Messages for pinning; LXC notes
+
+From a field deployment on a Proxmox LXC.
+
+### Fixed
+
+- **Pinning the section panels needs Manage Messages**, which the invite didn't
+  request — so a bot invited exactly per the docs 403'd on the `pins` call (a
+  second, distinct permission from the Manage Roles one for private channels).
+  The invite now requests Manage Channels + Manage Roles + **Manage Messages**
+  (`permissions=268443664`), pinning degrades gracefully (the panel still works
+  unpinned, with a log hint), and `--check` adds a non-fatal Manage Messages
+  heads-up.
+
+### Docs
+
+- New FAQ entry disambiguating the two setup 403s (Manage Roles on channel
+  create vs Manage Messages on pin).
+- New FAQ entry for **Proxmox / LXC**: `--schedule` and `systemctl --user` need
+  container nesting, `dbus-user-session`, and an explicit `XDG_RUNTIME_DIR` under
+  `pct enter`; logs land in the system journal (use `journalctl` without `--user`).
+
 ## [1.4.0] - 2026-07-17 - Split the panel, not the voice channels
 
 The v1.2 "split into sections" put the split in the wrong place (four voice
