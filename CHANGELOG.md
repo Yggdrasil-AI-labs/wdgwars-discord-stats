@@ -21,6 +21,13 @@ categories). The split belongs in the private config channel.
   config is now `{channel_id, messages: {section: message_id}}` (a pre-split
   single-panel `message_id` is migrated on the next `--setup`).
 
+### Fixed
+
+- Voice channels are created with their full name up front instead of a bare
+  label that gets renamed a moment later. A rename that failed (e.g. a rate-limit
+  during a big reconcile) used to leave a colonless duplicate that `label_of`
+  couldn't reconcile away.
+
 ### Notes
 
 - `--setup` is idempotent and migrates an existing display: it reuses the single

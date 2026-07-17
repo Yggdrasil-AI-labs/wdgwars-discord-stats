@@ -384,5 +384,49 @@ class SetupPrivateFallbackTests(unittest.TestCase):
                             for b in posts))
 
 
+class ReconcileChannelsTests(unittest.TestCase):
+    def test_creates_missing_with_full_name(self):
+        import unittest.mock as mock
+        created = []
+
+        def fake_api(method, path, body=None):
+            if method == "GET" and path.endswith("/channels"):
+                return [{"type": 4, "name": m.CATEGORY_NAME, "id": "cat"}]
+            if method == "POST":
+                created.append(body)
+                return {"id": "new", "name": body["name"]}
+            return {}
+
+        with mock.patch.object(m, "discord_api", side_effect=fake_api):
+            res = m.reconcile_channels({"Total": "📊 Total: 1 234"})
+        # created with the full name, not a bare "Total" that could linger
+        self.assertEqual(created[0]["name"], "📊 Total: 1 234")
+        self.assertIn("Total", res)
+
+    def test_deletes_ours_but_leaves_manual_channels(self):
+        import unittest.mock as mock
+        deleted = []
+        chs = [
+            {"type": 4, "name": m.CATEGORY_NAME, "id": "cat"},
+            {"type": 2, "name": "📊 Total: 9", "parent_id": "cat", "id": "t"},      # field
+            {"type": 2, "name": "🖥 Rig: 1 nets", "parent_id": "cat", "id": "d"},   # device
+            {"type": 2, "name": "general chat", "parent_id": "cat", "id": "x"},     # manual
+        ]
+
+        def fake_api(method, path, body=None):
+            if method == "GET" and path.endswith("/channels"):
+                return chs
+            if method == "DELETE":
+                deleted.append(path)
+                return {}
+            return {}
+
+        with mock.patch.object(m, "discord_api", side_effect=fake_api):
+            m.reconcile_channels({})   # nothing active -> remove ours, keep manual
+        self.assertIn("/channels/t", deleted)      # stale field removed
+        self.assertIn("/channels/d", deleted)      # stale device removed
+        self.assertNotIn("/channels/x", deleted)   # manual channel left alone
+
+
 if __name__ == "__main__":
     unittest.main()

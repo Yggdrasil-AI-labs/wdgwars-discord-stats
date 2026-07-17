@@ -521,11 +521,11 @@ def reconcile_channels(active):
             present.pop(lbl, None)
     for pos, lbl in enumerate(active):
         if lbl not in present:
-            # device channels are created with their 🖥 name up front so they're
-            # recognized as ours even before the first rename; fields start bare.
-            init_name = lbl if lbl in FIELD_ORDER else active[lbl]
+            # Create with the full target name up front (not a bare label). A bare
+            # intermediate that failed to rename would collide with the real
+            # channel under label_of and couldn't be reconciled away.
             created = discord_api("POST", f"/guilds/{GUILD_ID}/channels", {
-                "name": init_name, "type": 2, "parent_id": cat["id"], "position": pos,
+                "name": active[lbl], "type": 2, "parent_id": cat["id"], "position": pos,
             })
             if created:
                 present[lbl] = created
