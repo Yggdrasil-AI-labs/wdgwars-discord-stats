@@ -93,6 +93,67 @@ class FootprintTests(unittest.TestCase):
         self.assertEqual(m.footprint_aps(cells), 5)
 
 
+class DeviceChannelsTests(unittest.TestCase):
+    def test_builds_one_entry_per_rig(self):
+        me = {"devices": [
+            {"device_name": "Cardputer", "networks": 61234},
+            {"device_name": "Pixel 8", "networks": 12717},
+        ]}
+        dev = m.device_channels(me)
+        self.assertEqual(list(dev), ["Cardputer", "Pixel 8"])
+        self.assertEqual(dev["Cardputer"], "🖥 Cardputer: 61 234 nets")
+
+    def test_no_array_or_bad_rows(self):
+        self.assertEqual(m.device_channels({}), {})
+        self.assertEqual(m.device_channels({"devices": "x"}), {})
+        dev = m.device_channels({"devices": [{}, "nope"]})
+        self.assertEqual(list(dev), ["unnamed"])
+
+    def test_sanitizes_and_dedupes_names(self):
+        me = {"devices": [
+            {"device_name": "A:B│C", "networks": 1},
+            {"device_name": "A B C", "networks": 2},  # sanitizes to same label
+        ]}
+        dev = m.device_channels(me)
+        self.assertEqual(list(dev), ["A B C", "A B C (2)"])
+
+    def test_label_of_recovers_device_name(self):
+        self.assertEqual(m.label_of("🖥 New Key For x: 7 860 nets"), "New Key For x")
+
+
+class SectionsTests(unittest.TestCase):
+    def test_category_name_and_prefix(self):
+        self.assertEqual(m.section_category_name("Account"), "📊 │ Account")
+        orig = m.SECTION_PREFIX
+        try:
+            m.SECTION_PREFIX = "wdgo"
+            self.assertEqual(m.section_category_name("Devices"), "🖥 │ wdgo Devices")
+        finally:
+            m.SECTION_PREFIX = orig
+
+    def test_panel_labels_include_devices_toggle(self):
+        labels = m.panel_labels()
+        self.assertIn("Devices", labels)
+        self.assertIn("Footprint", labels)
+        self.assertIn("API", labels)
+        # every fixed field is assigned to exactly one section
+        self.assertEqual(sorted(m.FIELD_SECTION), sorted(m.FIELD_ORDER))
+
+    def test_active_sections_places_and_gates_fields(self):
+        stats = {"Total": "t", "API": "a", "Footprint": "f"}
+        devices = {"Cardputer": "🖥 Cardputer: 1 nets"}
+        cfg = {"fields": {"API": False, "Devices": True}}
+        by = m.active_sections(cfg, stats, devices)
+        self.assertIn("Total", by["Account"])
+        self.assertNotIn("API", by["Status"])       # hidden
+        self.assertIn("Footprint", by["Territory"])
+        self.assertEqual(by["Devices"], devices)     # toggle on
+
+    def test_active_sections_devices_toggle_off(self):
+        by = m.active_sections({"fields": {"Devices": False}}, {}, {"X": "y"})
+        self.assertEqual(by["Devices"], {})
+
+
 class FieldVisibilityTests(unittest.TestCase):
     def test_field_enabled_respects_config(self):
         cfg = {"fields": {"BLE": False}}
@@ -121,8 +182,8 @@ class ScrubTests(unittest.TestCase):
 
 
 class GatherStatsTests(unittest.TestCase):
-    def test_sample_returns_stats_and_api_ok_true(self):
-        stats, api_ok = m.gather_stats(sample=True)
+    def test_sample_returns_stats_devices_and_api_ok_true(self):
+        stats, devices, api_ok = m.gather_stats(sample=True)
         self.assertTrue(api_ok)
         self.assertIn("Total", stats)
         self.assertTrue(stats["Total"].endswith("104 063"))
@@ -133,6 +194,9 @@ class GatherStatsTests(unittest.TestCase):
         # Footprint is summed from the sample cells payload.
         self.assertIn("Footprint", stats)
         self.assertTrue(stats["Footprint"].endswith("156 APs"))
+        # Per-rig device channels come from the sample devices array.
+        self.assertEqual(list(devices), ["Cardputer", "Sleipnir", "Pixel 8"])
+        self.assertIn("61 234 nets", devices["Cardputer"])
 
     def test_api_down_reports_not_ok(self):
         orig_key = m.WDGO_KEY
@@ -141,9 +205,10 @@ class GatherStatsTests(unittest.TestCase):
             m.wdgo_api  # ensure attribute exists
             import unittest.mock as mock
             with mock.patch.object(m, "wdgo_api", return_value=(None, 12, 0)):
-                stats, api_ok = m.gather_stats(sample=False)
+                stats, devices, api_ok = m.gather_stats(sample=False)
             self.assertFalse(api_ok)
             self.assertIn("DOWN", stats["API"])
+            self.assertEqual(devices, {})  # no devices when the API is down
         finally:
             m.WDGO_KEY = orig_key
 
@@ -192,9 +257,10 @@ class DiscordApiTests(unittest.TestCase):
 class TickApiDownTests(unittest.TestCase):
     def test_api_down_tick_refreshes_only_api_channel(self):
         import unittest.mock as mock
-        cat = m.CATEGORY_NAME
+        # API lives in the Status section now; the down-path only touches that.
+        status_cat = m.section_category_name("Status")
         channels = [
-            {"type": 4, "name": cat, "id": "cat"},
+            {"type": 4, "name": status_cat, "id": "cat"},
             {"type": 2, "name": "\U0001f7e2 API: UP (5ms)", "parent_id": "cat", "id": "a"},
             {"type": 2, "name": "\U0001f4ca Total: 999", "parent_id": "cat", "id": "t"},
         ]
@@ -209,7 +275,7 @@ class TickApiDownTests(unittest.TestCase):
             return {}
 
         down_stats = {"API": "\U0001f534 API: DOWN (HTTP 0)", "Total": "\U0001f4ca Total: 0"}
-        with mock.patch.object(m, "gather_stats", return_value=(down_stats, False)), \
+        with mock.patch.object(m, "gather_stats", return_value=(down_stats, {}, False)), \
              mock.patch.object(m, "load_config", return_value={"fields": {}}), \
              mock.patch.object(m, "poll_reactions", return_value=False), \
              mock.patch.object(m, "discord_api", side_effect=fake_api), \

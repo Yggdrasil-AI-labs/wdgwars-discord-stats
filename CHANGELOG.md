@@ -4,6 +4,34 @@ All notable changes to wdgwars-discord-stats are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-07-17 - Sectioned display
+
+Splits both displays into sections and surfaces the per-rig breakdown as its own
+section.
+
+### Added
+
+- **Sectioned voice-channel display** (`live_stats_channels.py`): the flat
+  category is replaced by four category "sections" — 📊 Account, 🖥 Devices,
+  🌐 Territory, ⚙ Status. The **Devices** section renders one voice channel per
+  rig from the `/api/me` `devices` array (e.g. `🖥 Cardputer: 61 234 nets`) and is
+  toggled as a whole from the config panel (or `STATS_FIELDS_OFF=Devices`).
+  `--setup` now creates all four categories.
+- **`STATS_SECTION_PREFIX`**: optional namespace for the section categories
+  (`📊 │ wdgo Account`) so more than one display can share a server.
+- **Sectioned webhook embed** (`discord_stats_webhook.py`): the embed is grouped
+  under 📊 Account / 🌐 Territory / 🖥 Devices header dividers. The poster now also
+  makes a best-effort `/api/me/cells` call to show a Footprint line (skipped
+  silently if the endpoint is unavailable — never fails the post).
+
+### Changed
+
+- `gather_stats()` now returns `(stats, devices, api_ok)`; the Devices section is
+  built from the per-rig map.
+- Removed the `STATS_CATEGORY_NAME` env var (the single-category model it
+  configured is gone). A leftover old category can be deleted by hand; it is no
+  longer written to.
+
 ## [1.1.0] - 2026-07-17 - Per-rig breakdown and footprint
 
 Tracks the 2026-07-17 WDGoWars server update, which added a per-device `devices`

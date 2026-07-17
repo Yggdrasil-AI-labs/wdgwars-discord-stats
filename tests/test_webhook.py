@@ -30,27 +30,48 @@ class FakeResp:
         return False
 
 
+def _data_names(embed_fields):
+    """Field names minus the section-header dividers (headers carry a zero-width
+    value; real fields carry data)."""
+    return [f["name"] for f in embed_fields if f["value"] != "​"]
+
+
 class BuildEmbedTests(unittest.TestCase):
     def test_full_sample_has_all_metrics(self):
         embed = w.build_embed(w.SAMPLE_ME)
         e = embed["embeds"][0]
         names = [f["name"] for f in e["fields"]]
-        # Account metrics come first; per-rig device rows follow (see SAMPLE_ME).
-        self.assertEqual(names[:5], ["Wi-Fi", "BLE", "Aircraft", "MeshCore", "Total"])
+        # Account section header first, then the account metrics.
+        self.assertEqual(names[0], "📊 Account")
+        self.assertEqual(_data_names(e["fields"])[:5],
+                         ["Wi-Fi", "BLE", "Aircraft", "MeshCore", "Total"])
         self.assertEqual(e["description"], "Gang: Sample Gang")
         self.assertIn("SampleDriver", e["title"])
 
     def test_missing_fields_are_dropped_not_zeroed(self):
         embed = w.build_embed({"username": "Z", "wifi": 5})
         e = embed["embeds"][0]
-        names = [f["name"] for f in e["fields"]]
-        self.assertEqual(names, ["Wi-Fi"])  # no ble/aircraft/mesh/total
+        self.assertEqual(_data_names(e["fields"]), ["Wi-Fi"])  # no ble/aircraft/mesh/total
         self.assertIsNone(e["description"])  # no gang
 
     def test_thousands_separator_in_values(self):
         embed = w.build_embed({"username": "Z", "wifi": 12345, "total": 12345})
         vals = {f["name"]: f["value"] for f in embed["embeds"][0]["fields"]}
         self.assertEqual(vals["Wi-Fi"], "12,345")
+
+    def test_footprint_adds_territory_section(self):
+        embed = w.build_embed({"username": "Z", "wifi": 5}, footprint=3210)["embeds"][0]
+        names = [f["name"] for f in embed["fields"]]
+        self.assertIn("🌐 Territory", names)
+        vals = {f["name"]: f["value"] for f in embed["fields"]}
+        self.assertEqual(vals["🗺 Footprint"], "3,210 APs")
+        self.assertIn("/api/me/cells", embed["footer"]["text"])
+
+    def test_no_footprint_no_territory_section(self):
+        embed = w.build_embed({"username": "Z", "wifi": 5})["embeds"][0]
+        names = [f["name"] for f in embed["fields"]]
+        self.assertNotIn("🌐 Territory", names)
+        self.assertEqual(embed["footer"]["text"], "via /api/me")
 
 
 class DeviceFieldsTests(unittest.TestCase):
@@ -79,15 +100,19 @@ class DeviceFieldsTests(unittest.TestCase):
         self.assertEqual(fields[0]["name"], "🖥 unnamed")
         self.assertEqual(fields[0]["value"], "—")
 
-    def test_build_embed_appends_devices_and_updates_footer(self):
+    def test_build_embed_adds_devices_section_and_footer(self):
         embed = w.build_embed(w.SAMPLE_ME)["embeds"][0]
         names = [f["name"] for f in embed["fields"]]
-        self.assertEqual(names[:5], ["Wi-Fi", "BLE", "Aircraft", "MeshCore", "Total"])
-        self.assertIn("🖥 Cardputer", names)
+        self.assertIn("🖥 Devices", names)              # section header
+        self.assertIn("🖥 Cardputer", names)            # a rig row
+        # header comes immediately before the first rig row
+        self.assertLess(names.index("🖥 Devices"), names.index("🖥 Cardputer"))
         self.assertIn("per-rig", embed["footer"]["text"])
 
     def test_build_embed_without_devices_keeps_plain_footer(self):
         embed = w.build_embed({"username": "Z", "wifi": 1})["embeds"][0]
+        names = [f["name"] for f in embed["fields"]]
+        self.assertNotIn("🖥 Devices", names)
         self.assertEqual(embed["footer"]["text"], "via /api/me")
 
 
@@ -129,6 +154,25 @@ class FetchMeTests(unittest.TestCase):
                                return_value=FakeResp(body, 200)):
             with self.assertRaises(SystemExit):
                 w.fetch_me("k")
+
+
+class FetchFootprintTests(unittest.TestCase):
+    def test_sums_cell_aps(self):
+        import unittest.mock as mock
+        body = json.dumps({"ok": True, "cells": [
+            {"aps": 40}, {"aps": 100}, {"aps": 16}]}).encode()
+        with mock.patch.object(w.urllib.request, "urlopen",
+                               return_value=FakeResp(body, 200)):
+            self.assertEqual(w.fetch_footprint("k"), 156)
+
+    def test_bad_payload_or_error_returns_none(self):
+        import unittest.mock as mock
+        with mock.patch.object(w.urllib.request, "urlopen",
+                               return_value=FakeResp(b'{"ok": false}', 200)):
+            self.assertIsNone(w.fetch_footprint("k"))
+        with mock.patch.object(w.urllib.request, "urlopen",
+                               side_effect=w.urllib.error.URLError("boom")):
+            self.assertIsNone(w.fetch_footprint("k"))
 
 
 if __name__ == "__main__":

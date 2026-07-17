@@ -41,11 +41,20 @@ bot, Windows, no server, gang stats, and more). The short version is below.
 
 ## Option A: live voice-channel display
 
-The sidebar dashboard. A bot renames voice channels in a "live stats" category
-so their names read `📊 Total: 273 239`, `📶 WiFi: 67 201`, and so on. You choose
-which fields appear, and can toggle them from a mod channel. `setup` builds the
-category, the mod channel, and the control panel for you, no manual channel
-creation.
+The sidebar dashboard. A bot renames voice channels whose names read
+`📊 Total: 273 239`, `📶 WiFi: 67 201`, and so on. The channels are split across
+four category "sections" so the sidebar stays readable:
+
+- **📊 Account** — User, Team, Total, WiFi, BLE, ADS-B, Mesh, Reinforced, Rank
+- **🖥 Devices** — one channel per rig (from the `/api/me` `devices` array), so
+  you can see how much each Cardputer / Pi / phone contributed
+- **🌐 Territory** — Footprint (total APs owned), gang size, gang APs
+- **⚙ Status** — Updated, Today, Week, Credits, Quota, API health
+
+You choose which fields appear (and can hide the whole Devices section) by
+toggling from a mod channel. `setup` builds the categories, the mod channel, and
+the control panel for you, no manual channel creation. Set `STATS_SECTION_PREFIX`
+if you want to namespace the categories (e.g. `📊 │ wdgo Account`).
 
 ### Step 1: make a Discord bot
 
@@ -87,9 +96,9 @@ python live_stats_channels.py --setup   # create category + #stats-config + pane
 
 `--check` tells you exactly what is wrong if something is off (bad token, bot not
 invited, missing Manage Channels, bad key) with the fix for each. `--setup`
-creates the `📊 │ live stats` category, a `#stats-config` mod channel with a
-pinned control panel, and (if your key is set) populates the stat channels. Both
-are safe to re-run.
+creates the four section categories (📊 Account, 🖥 Devices, 🌐 Territory,
+⚙ Status), a `#stats-config` mod channel with a pinned control panel, and (if
+your key is set) populates the stat channels. Both are safe to re-run.
 
 The `#stats-config` channel is created **private** by default (hidden from
 regular members; server admins still see it, and you toggle from it). Set
@@ -150,13 +159,14 @@ you, use one of the local options above.
 Not everyone wants every number public. Easiest first:
 
 - **React on the panel:** the pinned panel in `#stats-config` has one emoji per
-  field. Click a field's emoji to toggle it on/off. The poller applies it, clears
-  your reaction (so it acts like a button), updates the panel, and adds/removes
-  the matching channel. (Takes up to one tick, ~5 min, to reflect.)
+  field (plus a 🖥 **Devices** toggle that shows/hides the whole per-rig section).
+  Click an emoji to toggle it on/off. The poller applies it, clears your reaction
+  (so it acts like a button), updates the panel, and adds/removes the matching
+  channel(s). (Takes up to one tick, ~5 min, to reflect.)
 - **Config file:** edit `~/.wdgwars-live-stats.json`, e.g. `{"fields": {"BLE": false}}`
   (a field missing from the map is shown).
 - **Environment** (works even where the config file does not persist, e.g.
-  GitHub Actions): set `STATS_FIELDS_OFF=BLE,Rank`.
+  GitHub Actions): set `STATS_FIELDS_OFF=BLE,Rank` (`Devices` hides the rig section).
 
 ## Option B: webhook post
 

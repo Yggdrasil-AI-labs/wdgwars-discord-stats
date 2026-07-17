@@ -44,8 +44,11 @@ import urllib.error
 import urllib.request
 
 ME_URL = "https://wdgwars.pl/api/me"
-USER_AGENT = "wdgwars-discord-stats/1.1 (+https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats)"
+CELLS_URL = "https://wdgwars.pl/api/me/cells"
+USER_AGENT = "wdgwars-discord-stats/1.2 (+https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats)"
 TIMEOUT = 30.0
+# Footprint shown by --sample (sum of a sample /api/me/cells payload).
+SAMPLE_FOOTPRINT = 3210
 
 # Canned data for --sample. Lets you verify your webhook and check the embed
 # formatting without an API key and without calling wdgwars.pl.
@@ -105,6 +108,29 @@ def fetch_me(key: str, url: str = ME_URL) -> dict:
     return data
 
 
+def fetch_footprint(key: str, url: str = CELLS_URL):
+    """Best-effort total APs owned, from GET /api/me/cells (sum of per-cell
+    counts, server-aggregated and uncapped). Returns None on any failure —
+    footprint is a nice-to-have, never a reason to fail the post. Never echoes
+    the key.
+    """
+    req = urllib.request.Request(url, headers={
+        "X-API-Key": key, "User-Agent": USER_AGENT, "Accept": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception:
+        return None
+    if not isinstance(data, dict) or not data.get("ok"):
+        return None
+    rows = data.get("cells")
+    if not isinstance(rows, list):
+        return None
+    return sum(c["aps"] for c in rows
+               if isinstance(c, dict) and isinstance(c.get("aps"), int))
+
+
 def _fmt_last_upload(value) -> str:
     """The date part of a device's last_upload. It arrives as a raw Postgres
     timestamp (e.g. '2026-07-17 02:32:02.854003+00'), which datetime.fromisoformat
@@ -149,23 +175,29 @@ def device_fields(me: dict, limit: int) -> list:
     return out
 
 
-def build_embed(me: dict) -> dict:
-    """Turn an /api/me response into a Discord embed payload.
+def _section_header(title: str) -> dict:
+    """A full-width embed field used as a visual section divider. Embeds have no
+    real headings, so a non-inline field with a zero-width value reads as one."""
+    return {"name": title, "value": "​", "inline": False}
+
+
+def build_embed(me: dict, footprint=None) -> dict:
+    """Turn an /api/me response into a Discord embed payload, split into
+    sections: 📊 Account (per-type counts + total), 🖥 Devices (one field per
+    rig from the devices array), and 🌐 Territory (footprint from /api/me/cells,
+    when available).
 
     Only fields that are reliably present are shown. Unknown or missing fields
-    are simply skipped rather than rendered as zero, so this keeps working if
-    the response shape changes.
+    are skipped rather than rendered as zero, so this keeps working if the
+    response shape changes.
     """
     username = me.get("username", "unknown")
 
-    # (label, key) pairs. Missing keys are dropped, not shown as 0.
-    metrics = [
-        ("Wi-Fi", "wifi"),
-        ("BLE", "ble"),
-        ("Aircraft", "aircraft"),
-        ("MeshCore", "mesh"),
-    ]
-    fields = [
+    # ── 📊 Account ── (label, key) pairs; missing keys are dropped, not zeroed.
+    metrics = [("Wi-Fi", "wifi"), ("BLE", "ble"),
+               ("Aircraft", "aircraft"), ("MeshCore", "mesh")]
+    fields = [_section_header("📊 Account")]
+    fields += [
         {"name": label, "value": f"{me[key]:,}", "inline": True}
         for label, key in metrics
         if isinstance(me.get(key), int)
@@ -173,13 +205,24 @@ def build_embed(me: dict) -> dict:
     if isinstance(me.get("total"), int):
         fields.append({"name": "Total", "value": f"{me['total']:,}", "inline": True})
 
-    # Per-rig rows after the account totals. Discord caps an embed at 25 fields.
-    devices = device_fields(me, limit=25 - len(fields))
-    fields.extend(devices)
+    # ── 🌐 Territory ── footprint (total APs owned), when /api/me/cells answered.
+    if isinstance(footprint, int):
+        fields.append(_section_header("🌐 Territory"))
+        fields.append({"name": "🗺 Footprint", "value": f"{footprint:,} APs",
+                       "inline": True})
+
+    # ── 🖥 Devices ── one field per rig, with whatever field budget is left
+    # (Discord caps an embed at 25 fields; reserve one for this header).
+    devices = device_fields(me, limit=max(0, 25 - len(fields) - 1))
+    if devices:
+        fields.append(_section_header("🖥 Devices"))
+        fields.extend(devices)
 
     gang = me.get("gang")
     description = f"Gang: {gang}" if gang else None
-    footer = "via /api/me · per-rig rows grouped by key name" if devices else "via /api/me"
+    src = "/api/me + /api/me/cells" if isinstance(footprint, int) else "/api/me"
+    footer = (f"via {src} · per-rig rows grouped by key name"
+              if devices else f"via {src}")
 
     return {
         "username": "WDGoWars Stats",
@@ -239,6 +282,7 @@ def main() -> int:
 
     if args.sample:
         me = SAMPLE_ME
+        footprint = SAMPLE_FOOTPRINT
     else:
         key = os.environ.get("WDGWARS_API_KEY")
         if not key:
@@ -247,8 +291,9 @@ def main() -> int:
                 "or pass --sample to test without one"
             )
         me = fetch_me(key, os.environ.get("WDGWARS_ME_URL", ME_URL))
+        footprint = fetch_footprint(key, os.environ.get("WDGWARS_CELLS_URL", CELLS_URL))
 
-    payload = build_embed(me)
+    payload = build_embed(me, footprint)
 
     if args.dry_run:
         print(json.dumps(payload, indent=2))

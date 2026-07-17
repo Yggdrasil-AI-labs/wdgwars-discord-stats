@@ -90,8 +90,10 @@ wide window. The channel is omitted automatically if your server doesn't serve
 `/api/me/cells`. Toggle it off like any other field.
 
 ### I already have a "live stats" style category.
-Point the tool at a different name with `STATS_CATEGORY_NAME="📊 │ my stats"` so
-it doesn't touch your existing one.
+The tool creates its own four section categories (📊 Account, 🖥 Devices,
+🌐 Territory, ⚙ Status), so it won't touch a differently-named one. If you run
+more than one display on the same server, set `STATS_SECTION_PREFIX` (e.g.
+`wdgo`) to namespace them: `📊 │ wdgo Account`, and so on.
 
 ### I don't want the config channel.
 It's created **private** by default (only admins see it). If you want it gone

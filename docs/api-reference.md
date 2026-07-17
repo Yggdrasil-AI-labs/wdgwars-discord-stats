@@ -371,10 +371,12 @@ Integrations, then Webhooks, and create one pointed at the channel you want the
 stats in. That URL is all the example needs. Keep it private: anyone with the
 URL can post to that channel.
 
-For the sidebar-dashboard look (a category of voice channels whose names show
-your live numbers, with per-field show/hide control), see
+For the sidebar-dashboard look (voice channels whose names show your live
+numbers, split into 📊 Account / 🖥 Devices / 🌐 Territory / ⚙ Status section
+categories with per-field show/hide control), see
 [`live_stats_channels.py`](../live_stats_channels.py). That one needs a Discord
-bot with Manage Channels, but reads the same endpoints documented here.
+bot with Manage Channels, and additionally reads `/api/me/cells` (footprint) and
+the per-rig `devices` array documented here.
 
 ---
 
