@@ -325,5 +325,52 @@ class SetupSchedulesTests(unittest.TestCase):
         sched.assert_not_called()
 
 
+class InviteTests(unittest.TestCase):
+    def test_invite_url_requests_manage_channels_and_roles(self):
+        url = m.invite_url("123")
+        self.assertIn("client_id=123", url)
+        self.assertIn(f"permissions={m.INVITE_PERMS}", url)
+        self.assertEqual(m.INVITE_PERMS, 0x10 | 0x10000000)
+
+
+class SetupPrivateFallbackTests(unittest.TestCase):
+    """When the bot lacks Manage Roles, creating the config channel WITH
+    permission overwrites 403s; setup must fall back to a public channel and
+    finish, not abort."""
+
+    def test_falls_back_to_public_when_overwrites_denied(self):
+        import unittest.mock as mock
+        posts = []
+
+        def fake_api(method, path, body=None):
+            if method == "GET" and path == "/users/@me":
+                return {"id": "bot"}
+            if method == "GET" and path.endswith("/channels"):
+                return []
+            if method == "POST":
+                posts.append(body)
+                if body and "permission_overwrites" in body:
+                    return None            # simulate 403: no Manage Roles
+                return {"id": "new"}
+            return {}
+
+        with mock.patch.object(m, "discord_api", side_effect=fake_api), \
+                mock.patch.object(m, "install_schedule"), \
+                mock.patch.object(m, "save_json"), \
+                mock.patch.object(m, "load_config", return_value={"fields": {}}), \
+                mock.patch.object(m, "WDGO_KEY", ""), \
+                mock.patch.object(m, "_BOT_ID", None), \
+                mock.patch.object(m, "CONFIG_PRIVATE", True):
+            rc = m.setup_discord(install_runner=False)
+
+        self.assertEqual(rc, 0)  # did not SystemExit
+        # it tried a private channel (type 0 + overwrites) ...
+        self.assertTrue(any(b and b.get("type") == 0 and "permission_overwrites" in b
+                            for b in posts))
+        # ... then retried the same channel public (type 0, no overwrites)
+        self.assertTrue(any(b and b.get("type") == 0 and "permission_overwrites" not in b
+                            for b in posts))
+
+
 if __name__ == "__main__":
     unittest.main()

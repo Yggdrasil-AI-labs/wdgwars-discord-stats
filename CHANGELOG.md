@@ -4,6 +4,28 @@ All notable changes to wdgwars-discord-stats are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-07-17 - Graceful private-channel fallback
+
+### Fixed
+
+- **Setup no longer hard-fails when the bot lacks Manage Roles.** Creating the
+  `#stats-config` channel *private* writes permission overwrites, which Discord
+  only permits with the Manage Roles permission (Manage Channels alone is not
+  enough). Previously that 403'd and setup aborted; you had to set
+  `STATS_CONFIG_PRIVATE=off` to get past it. Setup now falls back to creating the
+  channel public, prints exactly why, and tells you how to lock it down (grant
+  Manage Roles and re-run, or set it private by hand and give the bot access).
+  The reuse path (PATCH overwrites on an existing channel) degrades the same way
+  instead of silently claiming success.
+
+### Changed
+
+- The invite URL `--check` prints now requests **Manage Channels + Manage Roles**
+  (`permissions=268435472`) so the private config channel works out of the box.
+  Manage Channels alone still works; the config channel is just created public.
+- `--check` adds a non-fatal heads-up when `STATS_CONFIG_PRIVATE` is on but the
+  bot lacks Manage Roles, so you learn about it before setup rather than after.
+
 ## [1.3.0] - 2026-07-17 - Setup installs the updater
 
 ### Changed

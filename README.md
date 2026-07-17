@@ -64,12 +64,17 @@ Only a human can do this part; everything after is one command.
 2. Left sidebar → **Bot** → **Reset Token** → **Copy**. That is your `DISCORD_BOT_TOKEN`.
 3. Invite the bot to your server. Paste this URL in your browser, replacing
    `YOUR_CLIENT_ID` with the **Application ID** from the **General Information**
-   page (`permissions=16` is "Manage Channels", the only permission it needs):
+   page (`permissions=268435472` is **Manage Channels + Manage Roles**):
 
    ```
-   https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&scope=bot&permissions=16
+   https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&scope=bot&permissions=268435472
    ```
-   Pick your server and authorize.
+   Pick your server and authorize. Manage Channels is the core permission;
+   Manage Roles is only needed so the `#stats-config` channel can be created
+   **private**. If you'd rather grant only Manage Channels (`permissions=16`),
+   setup still works, but `#stats-config` is created public (or set
+   `STATS_CONFIG_PRIVATE=off` to skip privacy entirely). `--check` prints the
+   right invite URL for your bot.
 4. Get your server id: Discord → Settings → Advanced → turn on **Developer Mode**,
    then right-click your server icon → **Copy Server ID**.
 

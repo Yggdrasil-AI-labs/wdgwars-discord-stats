@@ -114,6 +114,17 @@ entirely, delete it, the display keeps working and you change fields via the
 config file or `STATS_FIELDS_OFF`. Or never create it: `STATS_CONFIG_PRIVATE`
 controls visibility; deleting the channel after setup is fine.
 
+### Setup couldn't make `#stats-config` private (permission error).
+Making a channel private means writing permission overwrites, which Discord only
+lets a bot do if it has the **Manage Roles** permission, on top of Manage
+Channels. The classic symptom: the categories and channels create fine, but the
+private `#stats-config` fails. Setup now handles this gracefully, it creates the
+channel **public** and tells you so, rather than aborting. To get it private,
+either re-invite the bot with Manage Roles (`--check` prints the exact invite
+URL, `permissions=268435472`) and re-run `--setup`, or do what works without any
+extra bot permission: set the channel private by hand in Discord and grant the
+bot access to it. Set `STATS_CONFIG_PRIVATE=off` if you don't care about privacy.
+
 ### How do I hide/show fields?
 React to a field's emoji on the pinned panel in `#stats-config`, edit
 `~/.wdgwars-live-stats.json` (`{"fields": {"BLE": false}}`), or set

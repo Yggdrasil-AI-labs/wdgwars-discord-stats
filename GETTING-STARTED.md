@@ -20,10 +20,13 @@ No dependencies to install, it's standard-library Python.
 2. Copy the **Application ID** from **General Information** (used in step 4).
 3. **Bot** tab -> **Reset Token** -> **Copy**. That is your bot token.
 4. Invite it to your server, paste this in a browser with your Application ID
-   swapped in (`permissions=16` is "Manage Channels", the only one it needs):
+   swapped in (`permissions=268435472` is Manage Channels + Manage Roles; Manage
+   Roles is only needed to create the `#stats-config` channel private):
    ```
-   https://discord.com/oauth2/authorize?client_id=YOUR_APP_ID&scope=bot&permissions=16
+   https://discord.com/oauth2/authorize?client_id=YOUR_APP_ID&scope=bot&permissions=268435472
    ```
+   Manage Channels alone (`permissions=16`) also works; `#stats-config` is just
+   created public in that case.
 5. Get your server id: Discord **Settings -> Advanced -> Developer Mode** on,
    then right-click your server icon -> **Copy Server ID**.
 

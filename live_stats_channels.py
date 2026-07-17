@@ -14,9 +14,12 @@ Setup
 -----
 1. Get your WDGoWars API key from https://wdgwars.pl/profile
 2. Create a Discord bot (https://discord.com/developers/applications), copy its
-   token, and invite it to your server with the "Manage Channels" permission.
-3. Make a category in your server for the display (default name
-   "📊 │ live stats"). The script creates/removes the voice channels inside it.
+   token, and invite it with "Manage Channels" plus "Manage Roles" (Manage Roles
+   is only needed so the #stats-config channel can be created private; without it
+   setup still works but that channel is created public). `--check` prints the
+   exact invite URL.
+3. The script creates its own section categories (📊 Account, 🖥 Devices,
+   🌐 Territory, ⚙ Status) and manages the voice channels inside them.
 4. Export the config (never hard-code the token or key):
 
        export WDGWARS_API_KEY="your-64-char-key"
@@ -205,10 +208,28 @@ def bot_id() -> str:
     return _BOT_ID
 
 
+# Discord permission bits. Manage Channels creates/renames/deletes channels;
+# Manage Roles is ADDITIONALLY required to create a channel with permission
+# overwrites (what makes #stats-config private). The invite offers both so the
+# private config channel works out of the box; setup falls back to a public
+# channel if only Manage Channels was granted.
+PERM_ADMIN = 0x8
+PERM_MANAGE_CHANNELS = 0x10
+PERM_MANAGE_ROLES = 0x10000000
+INVITE_PERMS = PERM_MANAGE_CHANNELS | PERM_MANAGE_ROLES  # 268435472
+
+
+def invite_url(client_id: str) -> str:
+    """Bot invite URL requesting Manage Channels + Manage Roles."""
+    return (f"https://discord.com/oauth2/authorize?client_id={client_id}"
+            f"&scope=bot&permissions={INVITE_PERMS}")
+
+
 def config_overwrites():
     """Permission overwrites that hide the mod channel from @everyone while
     letting the bot view/post/manage it. None if privacy is disabled. (Server
-    admins still see it, Discord's Administrator permission bypasses overwrites.)"""
+    admins still see it, Discord's Administrator permission bypasses overwrites.)
+    Applying these requires the bot to hold Manage Roles."""
     if not CONFIG_PRIVATE:
         return None
     view = 1 << 10  # VIEW_CHANNEL
@@ -619,25 +640,48 @@ def setup_discord(install_runner: bool = True) -> int:
 
     cfg_name = os.environ.get("STATS_CONFIG_CHANNEL_NAME", "stats-config")
     ow = config_overwrites()
+    priv_note = (
+        "  To hide it: grant the bot 'Manage Roles' (re-invite with "
+        f"{invite_url(bot_id())} ) and re-run --setup, or set the channel private "
+        "by hand and give the bot access.")
     modch = next((c for c in chs if c["type"] == 0 and c["name"] == cfg_name), None)
     if modch:
         print(f"mod-config channel exists: #{cfg_name} ({modch['id']})")
         if ow is not None:
-            discord_api("PATCH", f"/channels/{modch['id']}", {"permission_overwrites": ow})
-            print("  set private (hidden from regular members)")
+            if discord_api("PATCH", f"/channels/{modch['id']}",
+                           {"permission_overwrites": ow}) is not None:
+                print("  set private (hidden from regular members)")
+            else:
+                print("  could NOT set it private: the bot needs 'Manage Roles' to "
+                      "change channel privacy. Left as-is.")
+                print(priv_note)
     else:
-        payload = {
+        base = {
             "name": cfg_name, "type": 0, "parent_id": parent_id,
             "topic": "Control which live-stats fields show. React with a field's "
                      "emoji below to toggle it.",
         }
-        if ow is not None:
-            payload["permission_overwrites"] = ow
-        modch = discord_api("POST", f"/guilds/{GUILD_ID}/channels", payload)
+        if ow is None:
+            modch = discord_api("POST", f"/guilds/{GUILD_ID}/channels", base)
+            if modch:
+                print(f"created mod-config channel: #{cfg_name} ({modch['id']}) [visible to all]")
+        else:
+            modch = discord_api("POST", f"/guilds/{GUILD_ID}/channels",
+                                dict(base, permission_overwrites=ow))
+            if modch:
+                print(f"created mod-config channel: #{cfg_name} ({modch['id']}) [hidden from members]")
+            else:
+                # Creating a channel WITH overwrites needs Manage Roles; the bot
+                # may only have Manage Channels. Fall back to a public channel so
+                # setup still completes, and say how to lock it down.
+                print("  couldn't create it private (the bot needs 'Manage Roles' to "
+                      "set channel privacy). Creating it public instead.")
+                modch = discord_api("POST", f"/guilds/{GUILD_ID}/channels", base)
+                if modch:
+                    print(f"created mod-config channel: #{cfg_name} ({modch['id']}) [PUBLIC]")
+                    print(priv_note)
         if not modch:
             raise SystemExit("failed to create the mod-config channel")
-        vis = "hidden from members" if ow is not None else "visible to all"
-        print(f"created mod-config channel: #{cfg_name} ({modch['id']}) [{vis}]")
 
     cfg = load_config()
     body = {"content": render_panel_text(cfg)}
@@ -785,8 +829,7 @@ def preflight():
                               "Developer Portal (Bot -> Reset Token)."))
         return checks, False, None
     checks.append((True, f"bot token OK (logged in as {me.get('username', 'bot')})"))
-    invite = (f"https://discord.com/oauth2/authorize?client_id={me['id']}"
-              "&scope=bot&permissions=16")
+    invite = invite_url(me["id"])
 
     guild = discord_api("GET", f"/guilds/{GUILD_ID}")
     if not (isinstance(guild, dict) and guild.get("id")):
@@ -806,10 +849,22 @@ def preflight():
                     perms |= int(r.get("permissions", 0))
                 except (TypeError, ValueError):
                     pass
-    # 0x8 = Administrator, 0x10 = Manage Channels
-    can_write = bool(guild.get("owner_id") == me["id"] or perms & 0x8 or perms & 0x10)
+    is_admin = bool(guild.get("owner_id") == me["id"] or perms & PERM_ADMIN)
+    can_write = bool(is_admin or perms & PERM_MANAGE_CHANNELS)
     checks.append((can_write, "bot has Manage Channels" if can_write else
                    f"Bot lacks Manage Channels in this server. Re-invite: {invite}"))
+
+    # Manage Roles is only needed to auto-set the config channel private. Missing
+    # it is not fatal (setup falls back to a public channel), so this is a
+    # heads-up, not a blocker.
+    if CONFIG_PRIVATE:
+        has_roles = bool(is_admin or perms & PERM_MANAGE_ROLES)
+        checks.append((has_roles,
+                       "bot has Manage Roles (can make #stats-config private)"
+                       if has_roles else
+                       "bot lacks Manage Roles, so #stats-config can't be made "
+                       "private automatically; setup will create it public. Grant "
+                       f"Manage Roles (re-invite) to fix, or set STATS_CONFIG_PRIVATE=off. {invite}"))
 
     key_ok = None
     if WDGO_KEY:
