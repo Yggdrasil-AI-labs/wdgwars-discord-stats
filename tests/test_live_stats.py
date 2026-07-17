@@ -77,6 +77,22 @@ class FindGangTests(unittest.TestCase):
         self.assertEqual(m.find_gang(None, "A"), (None, None))
 
 
+class FootprintTests(unittest.TestCase):
+    def test_sum_aps_from_sample_cells(self):
+        self.assertEqual(m.footprint_aps(m.SAMPLE_CELLS), 156)
+
+    def test_invalid_or_missing_returns_none(self):
+        self.assertIsNone(m.footprint_aps(None))
+        self.assertIsNone(m.footprint_aps({}))
+        self.assertIsNone(m.footprint_aps({"ok": False, "cells": []}))
+        self.assertIsNone(m.footprint_aps({"ok": True}))  # no cells key
+        self.assertIsNone(m.footprint_aps({"ok": True, "cells": "nope"}))
+
+    def test_skips_malformed_rows(self):
+        cells = {"ok": True, "cells": [{"aps": 5}, {"aps": "x"}, "nope", {"lat": 1}]}
+        self.assertEqual(m.footprint_aps(cells), 5)
+
+
 class FieldVisibilityTests(unittest.TestCase):
     def test_field_enabled_respects_config(self):
         cfg = {"fields": {"BLE": False}}
@@ -114,6 +130,9 @@ class GatherStatsTests(unittest.TestCase):
         # Sample driver is in a gang that appears on the sample leaderboard.
         self.assertIn("Gang Size", stats)
         self.assertIn("Gang APs", stats)
+        # Footprint is summed from the sample cells payload.
+        self.assertIn("Footprint", stats)
+        self.assertTrue(stats["Footprint"].endswith("156 APs"))
 
     def test_api_down_reports_not_ok(self):
         orig_key = m.WDGO_KEY

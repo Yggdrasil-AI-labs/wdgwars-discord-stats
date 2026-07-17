@@ -70,13 +70,24 @@ returns the full roster with each member's counts (it only 404s if you're not in
 a team). The tool doesn't render per-member channels yet, but the data's there.
 
 ### Can it show per-device / per-hardware uploads (how much each rig contributed)?
-Not yet. WDGoWars aggregates stats per *account*, `/api/me` returns your combined
-totals with no per-device split, so the tool has nothing to break out. The data
-likely exists server-side (every API key carries a `device_name`), so it needs
-LOCOSP to expose a per-device breakdown (e.g. a `devices` array on `/api/me`).
-It's been requested. Once an endpoint exists, adding per-device channels is a
-small change. The only workaround today is one API key per device, which is
-per-key rather than per-hardware and doesn't scale to a gang.
+Yes, as of the 2026-07-17 server update. `/api/me` now returns a `devices` array,
+one row per rig with `networks` (Wi-Fi + BLE combined), `aircraft`, `mesh`,
+`uploads`, `total`, and `last_upload`. The webhook poster
+(`discord_stats_webhook.py`) renders one embed field per rig. It groups uploads by
+the API key that sent them and reports each key's `device_name`, so the trick is
+**one clearly named key per rig** (`"Cardputer"`, `"Sleipnir"`, `"Pixel 8"`), used
+only on that device. Reusing a key across rigs merges them; two spellings of one
+name (`"Monster RF"` vs `"MOnster RF"`) split one rig in two. Renaming a key keeps
+its history. These are per-rig *contribution* counts (what each key brought in,
+history back to ~mid-June), not a reslice of your live account total, so they
+won't sum to it.
+
+### Can it show my whole footprint (how many APs I own, and where)?
+The live display has a **Footprint** channel showing your total APs owned, summed
+from `/api/me/cells`. That endpoint is server-aggregated and uncapped, so it's the
+real ownership number, unlike raw `/api/me/aps`, whose point list truncates on a
+wide window. The channel is omitted automatically if your server doesn't serve
+`/api/me/cells`. Toggle it off like any other field.
 
 ### I already have a "live stats" style category.
 Point the tool at a different name with `STATS_CATEGORY_NAME="📊 │ my stats"` so

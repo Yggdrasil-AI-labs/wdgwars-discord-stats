@@ -44,7 +44,7 @@ import urllib.error
 import urllib.request
 
 ME_URL = "https://wdgwars.pl/api/me"
-USER_AGENT = "wdgwars-discord-stats/1.0 (+https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats)"
+USER_AGENT = "wdgwars-discord-stats/1.1 (+https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats)"
 TIMEOUT = 30.0
 
 # Canned data for --sample. Lets you verify your webhook and check the embed
@@ -58,6 +58,14 @@ SAMPLE_ME = {
     "mesh": 12,
     "total": 13125,
     "gang": "Sample Gang",
+    # Per-rig contribution breakdown, grouped by API-key device_name (see the
+    # devices array on /api/me). Contribution counts, not a reslice of the totals.
+    "devices": [
+        {"device_name": "Cardputer", "networks": 11800, "aircraft": 0, "mesh": 0,
+         "uploads": 57, "total": 11800, "last_upload": "2026-07-17 02:32:02.854003+00"},
+        {"device_name": "Sleipnir", "networks": 1223, "aircraft": 90, "mesh": 12,
+         "uploads": 40, "total": 1325, "last_upload": "2026-07-16 22:10:00.000000+00"},
+    ],
 }
 
 
@@ -97,6 +105,50 @@ def fetch_me(key: str, url: str = ME_URL) -> dict:
     return data
 
 
+def _fmt_last_upload(value) -> str:
+    """The date part of a device's last_upload. It arrives as a raw Postgres
+    timestamp (e.g. '2026-07-17 02:32:02.854003+00'), which datetime.fromisoformat
+    can't parse before Python 3.11, so just take the leading date substring, which
+    is all we want to show anyway. Returns '' for anything unexpected."""
+    if not isinstance(value, str) or not value:
+        return ""
+    return value.replace("T", " ").split(" ", 1)[0]
+
+
+def device_fields(me: dict, limit: int) -> list:
+    """One embed field per rig from the /api/me `devices` array.
+
+    Each row is grouped by the API key's device_name and is a per-rig
+    *contribution* count (networks that key brought in), not a reslice of your
+    account totals. Returns [] when the response has no devices array (older
+    server), so the embed still works. Caps at `limit` fields to stay within
+    Discord's 25-field-per-embed limit.
+    """
+    devices = me.get("devices")
+    if not isinstance(devices, list) or limit <= 0:
+        return []
+    out = []
+    for d in devices[:limit]:
+        if not isinstance(d, dict):
+            continue
+        name = (str(d.get("device_name")) if d.get("device_name") else "unnamed")[:256]
+        parts = []
+        if isinstance(d.get("networks"), int):
+            parts.append(f"{d['networks']:,} nets")
+        if isinstance(d.get("aircraft"), int) and d["aircraft"]:
+            parts.append(f"{d['aircraft']:,} air")
+        if isinstance(d.get("mesh"), int) and d["mesh"]:
+            parts.append(f"{d['mesh']:,} mesh")
+        if isinstance(d.get("uploads"), int):
+            parts.append(f"{d['uploads']:,} uploads")
+        last = _fmt_last_upload(d.get("last_upload"))
+        if last:
+            parts.append(f"last {last}")
+        out.append({"name": f"🖥 {name}", "value": " · ".join(parts) or "—",
+                    "inline": True})
+    return out
+
+
 def build_embed(me: dict) -> dict:
     """Turn an /api/me response into a Discord embed payload.
 
@@ -121,8 +173,13 @@ def build_embed(me: dict) -> dict:
     if isinstance(me.get("total"), int):
         fields.append({"name": "Total", "value": f"{me['total']:,}", "inline": True})
 
+    # Per-rig rows after the account totals. Discord caps an embed at 25 fields.
+    devices = device_fields(me, limit=25 - len(fields))
+    fields.extend(devices)
+
     gang = me.get("gang")
     description = f"Gang: {gang}" if gang else None
+    footer = "via /api/me · per-rig rows grouped by key name" if devices else "via /api/me"
 
     return {
         "username": "WDGoWars Stats",
@@ -133,7 +190,7 @@ def build_embed(me: dict) -> dict:
                 "url": "https://wdgwars.pl/profile",
                 "color": 0xB08850,  # matches the gungnir badge accent
                 "fields": fields,
-                "footer": {"text": "via /api/me"},
+                "footer": {"text": footer},
             }
         ],
     }

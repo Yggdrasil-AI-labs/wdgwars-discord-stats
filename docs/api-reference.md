@@ -28,10 +28,19 @@ X-API-Key: <64-char hex>
 ```
 
 You get your key from your profile page at `wdgwars.pl/profile`. All keys issued
-to your account are functionally equivalent (per LOCOSP, 2026-06-02): there is no
-per-key scoping, per-device rate limit, or analytics. The `device_name` attached
-to a key is a cosmetic label (defaults to `"Mobile App"`, max 64 chars) so you
-can tell your keys apart on the dashboard.
+to your account are functionally equivalent for *authentication*: there is no
+per-key scoping or per-key rate limit (per LOCOSP, 2026-06-02). The `device_name`
+attached to a key (defaults to `"Mobile App"`, max 64 chars) started as a
+cosmetic label, but it is now load-bearing: `/api/me` groups your uploads by the
+key that sent them and reports one row per `device_name` in a `devices` array
+(shipped 2026-07-17, see section 3). That makes the label your per-rig identity.
+
+Practical consequence: use **one clearly named key per rig** (e.g. `"Cardputer"`,
+`"Sleipnir"`, `"Pixel 8"`) and use each key only on its own device. Then the
+per-device breakdown reads cleanly. Reusing a key across rigs merges them into one
+row; two slightly different labels (`"Monster RF"` vs `"MOnster RF"`) split one rig
+into two rows. Renaming a key keeps its history (the row is keyed by the key's id,
+not its text).
 
 ### Key safety (read this before you write any code)
 
@@ -86,9 +95,52 @@ library's transport code):
 | `total` | int | Flat sum of `wifi + ble + aircraft + mesh` (each type counts equally). |
 | `your_rank` | object | `{all_time, today, week, top_n}`. Your rank per board, or `null` for a board where you fall outside the cached window (`top_n`, server default 100). Shipped 2026-06-03. |
 | `recent_captures` | array | Up to ~20 of your most recent territory captures, newest first, attacker-side only. Each: `{when, defender_gang, ap_count}` (`when` is a naive UTC `YYYY-MM-DD HH:MM:SS` string). Shipped 2026-06-03. |
+| `devices` | array | Per-rig contribution breakdown, one row per API-key `device_name`. Shipped 2026-07-17. See below. |
 
 Also observed: `gang_id`, `gang_role`, and an earned `badges` list. Exact keys can
 drift, so confirm against your own call before hard-coding.
+
+#### The `devices` array (per-rig breakdown)
+
+`/api/me` groups your uploads by the API key that sent them and returns one row
+per key, keyed on its `device_name`. Confirmed live 2026-07-17:
+
+```json
+"devices": [
+  {"device_name": "Cardputer", "networks": 1234, "aircraft": 0, "mesh": 0,
+   "uploads": 57, "total": 1234, "last_upload": "2026-07-17 02:32:02.854003+00"}
+]
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `device_name` | string | The key's label. This is the grouping key (see section 1). |
+| `networks` | int | Wi-Fi **and** BLE combined for this rig. The API does not split them here. |
+| `aircraft` | int | ADS-B aircraft this rig brought in. |
+| `mesh` | int | MeshCore nodes this rig brought in. |
+| `uploads` | int | Number of upload requests this key made. |
+| `total` | int | `networks + aircraft + mesh` for this rig. |
+| `last_upload` | string | Timestamp of this rig's most recent upload (see the format note below). |
+
+What this is and is not:
+
+- It is a **per-rig contribution count**, the new records each key brought in, with
+  history going back to about mid-June 2026. It is **not** your current unique
+  account total. The sum of `devices[*].total` is a count of contributions over
+  that window, not `total` on the parent object (which is your live account sum
+  and dedupes across rigs and time). Do not expect the two to match.
+- Only keys that have uploaded in the tracked window appear. A key that has never
+  uploaded (or uploaded only before the window) yields no row.
+- `networks` deliberately folds Wi-Fi and BLE together. If you need them split,
+  the parent-level `wifi` / `ble` are account-wide only; there is no per-rig split.
+
+> **Timestamp format caveat.** `last_upload` is a raw Postgres `timestamptz`
+> string like `2026-07-17 02:32:02.854003+00`: a space separator (not `T`),
+> microseconds, and a two-digit `+00` offset. `datetime.fromisoformat()` only
+> parses this on **Python 3.11+**; on 3.9/3.10 it raises `ValueError`. If you
+> support older Pythons, take the date substring (`s.split(" ")[0]`) or
+> `s.split("T")[0]` rather than parsing the whole string. (Note this differs from
+> the clean `server_time` on `/api/me/cells`, which is ISO-8601 with `Z`.)
 
 > Note on paths: these fields are identical on `/api/me` and `/endpoint/me`. The
 > live pollers in this repo read `/endpoint/me` because `/endpoint/*` bypasses
@@ -123,8 +175,51 @@ are `{user_id, username, wifi, ble, aircraft, mesh, total, is_patron}`.
 
 ### `GET /api/me/aps?since=<ISO8601>`: your upload volume in a window
 
-Returns `{count}`, the number of APs credited to you since the given timestamp.
-Handy for a "you uploaded N in the last 24h" line.
+Returns `{count}` plus an `aps` array of your raw points
+(`{lat, lng, ssid, type, captured_at}`). Handy for a "you uploaded N in the last
+24h" line when you pass `since`.
+
+> **Do not use this for total footprint.** With no `since` (or a wide window) the
+> `aps` array is **truncated** server-side, and the response says so: an observed
+> call returned `{"count": 200000, "truncated": true, …}`. So the point list is
+> capped and `count` reflects the cap, not your real AP total. For footprint use
+> `/api/me/cells` below, which is server-aggregated and uncapped. (`captured_at`
+> here uses the same raw-Postgres timestamp format as `last_upload`; see the note
+> in section 3.)
+
+### `GET /api/me/cells`: your footprint (server-aggregated, uncapped)
+
+The right source for "how many APs do I own and where." The server aggregates
+your APs into a fixed lat/lng grid and returns the per-cell counts, so there is
+no point-list cap to trip. This is the exact number the ownership engine uses.
+Confirmed live 2026-07-17:
+
+```json
+{
+  "ok": true,
+  "grid_lat": 0.02, "grid_lng": 0.02,
+  "count": 1307,
+  "server_time": "2026-07-17T13:33:27Z",
+  "cells": [ {"lat": 41.5, "lng": -80.94, "aps": 3}, … ]
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `count` | int | Number of populated cells (distinct ~2 km tiles you have APs in). |
+| `grid_lat` / `grid_lng` | float | Cell size in degrees (`0.02°` ≈ 2 km per side). |
+| `cells` | array | One `{lat, lng, aps}` per populated cell. `lat`/`lng` are the cell's corner. |
+| `server_time` | string | Snapshot time, clean ISO-8601 with `Z`. |
+
+Two footprint numbers fall out of this:
+
+- **Cells / tiles owned** = `count` (how spread out you are).
+- **Total APs owned** = `sum(cell["aps"] for cell in cells)` (the ownership-engine
+  AP total, the number `/api/me/aps` can't give you once it truncates).
+
+This is the same endpoint the companion feeder devs were pointed at for
+footprint. It supersedes summing `/api/me/aps` for anything but a recent-window
+volume line.
 
 ### `GET /api/badges`: badges you have earned
 
@@ -213,11 +308,19 @@ withheld:
 | Per-cell, per-team AP breakdown | Deliberately withheld as an anti-cheat measure. Do not re-request it. |
 | Full badge catalog | No public enumeration endpoint (only your earned `badges`). |
 | Per-AP effective hardening | Not known to be exposed on any read endpoint. Do not assume a field for it. |
-| Per-device / per-hardware upload split | Not exposed. Stats are per-account; `/api/me` has no per-device breakdown, though keys carry a `device_name`. Would need a new LOCOSP surface (e.g. a `devices` array on `/api/me`). Requested; not shipped. (Per-**member** gang stats *are* available via `/api/team/me`, section 3.) |
+| Exact rank in the long tail | `your_rank` covers ranks up to `top_n` (default 100); past that it is `null`. |
 
-Note: your own rank and your recent captures *are* exposed now (`your_rank` and
-`recent_captures` on `/api/me`, both shipped 2026-06-03). Earlier drafts of this
-reference said they were not; that was wrong.
+Note: several things earlier drafts listed as "not exposed" have since shipped and
+moved out of this table:
+
+- **Your own rank and recent captures** — `your_rank` and `recent_captures` on
+  `/api/me`, both shipped 2026-06-03.
+- **Per-device / per-hardware upload split** — the `devices` array on `/api/me`,
+  shipped 2026-07-17 (section 3). It is a per-rig *contribution* breakdown grouped
+  by key `device_name`, not a re-slicing of your live account totals. (Per-**member**
+  gang stats are separately available via `/api/team/me`, section 3.)
+- **Uncapped footprint** — `/api/me/cells` gives the server-aggregated per-cell AP
+  counts the raw `/api/me/aps` list truncates away.
 
 ---
 
@@ -279,8 +382,9 @@ bot with Manage Channels, but reads the same endpoints documented here.
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| GET | `/api/me` | X-API-Key | Identity, per-type counts, total, `your_rank`, `recent_captures`. |
-| GET | `/api/me/aps?since=<ISO>` | X-API-Key | `{count}` of APs credited to you since a timestamp. |
+| GET | `/api/me` | X-API-Key | Identity, per-type counts, total, `your_rank`, `recent_captures`, `devices` (per-rig breakdown). |
+| GET | `/api/me/aps?since=<ISO>` | X-API-Key | Recent-window upload volume. Point list truncates on wide windows, don't use for total footprint. |
+| GET | `/api/me/cells` | X-API-Key | Footprint: server-aggregated per-cell AP counts, uncapped. Cells = `count`, APs = sum of `cells[*].aps`. |
 | GET | `/api/leaderboard` | X-API-Key | Ranked boards (all_time/today/week) + `gangs` (15-min cache). |
 | GET | `/api/badges` | X-API-Key | Badges you have earned. |
 | GET | `/api/member-territories` | X-API-Key | Cells your gang dominates (owned only). |

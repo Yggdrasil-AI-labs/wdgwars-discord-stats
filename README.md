@@ -198,9 +198,13 @@ anyone who has it can post to that channel.
 
 The script reads [`GET /api/me`](docs/api-reference.md#3-read-endpoints), which
 returns your username, per-type capture counts (Wi-Fi, BLE, aircraft, MeshCore),
-and lifetime total. See the [API reference](docs/api-reference.md) for the full
-field list, what the API does not expose, and the other read endpoints you can
-build on.
+lifetime total, and a `devices` array breaking uploads out per rig (grouped by
+each API key's name). The webhook poster renders one field per rig; name a key
+per device to keep it readable. The live display's **Footprint** channel adds your
+total APs owned from [`/api/me/cells`](docs/api-reference.md#3-read-endpoints)
+(server-aggregated and uncapped). See the [API reference](docs/api-reference.md)
+for the full field list, what the API does not expose, and the other read
+endpoints you can build on.
 
 ## A note on scope
 

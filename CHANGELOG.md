@@ -4,6 +4,34 @@ All notable changes to wdgwars-discord-stats are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-07-17 - Per-rig breakdown and footprint
+
+Tracks the 2026-07-17 WDGoWars server update, which added a per-device `devices`
+array to `/api/me` and a server-aggregated `/api/me/cells` footprint endpoint.
+Both were confirmed against a live account before shipping this release.
+
+### Added
+
+- **Per-rig breakdown in the webhook poster** (`discord_stats_webhook.py`): reads
+  the new `devices` array on `/api/me` and renders one embed field per rig
+  (`networks`, `aircraft`/`mesh` when non-zero, `uploads`, last-upload date),
+  grouped by each API key's `device_name`. Name a key per device for clean rows.
+  Degrades silently on older servers with no `devices` array.
+- **`Footprint` channel in the live display** (`live_stats_channels.py`): total
+  APs owned, summed from `/api/me/cells` (server-aggregated and uncapped, the real
+  ownership number that raw `/api/me/aps` truncates away). Toggles like any field;
+  omitted automatically when the endpoint isn't served.
+- **`docs/api-reference.md`**: documents the `devices` array and `/api/me/cells`,
+  corrects the auth section (a key's `device_name` is now the per-rig grouping
+  key, not cosmetic), flags the `/api/me/aps` truncation, and notes the
+  raw-Postgres `last_upload` timestamp format (needs care before Python 3.11).
+
+### Notes
+
+- Per-rig `devices` counts are *contributions* (what each key brought in, history
+  back to about mid-June 2026), not a reslice of your live account total, so they
+  do not sum to it. Documented in the reference and FAQ.
+
 ## [1.0.0] - 2026-07-16 - Initial release
 
 First public release. Two ready-to-run Discord displays for your WDGoWars stats,

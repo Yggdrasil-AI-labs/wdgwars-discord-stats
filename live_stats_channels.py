@@ -3,8 +3,8 @@
 
 Renames a set of voice channels in a "live stats" category so their names
 show your current WDGoWars numbers, updated on a schedule. This is the
-at-a-glance display (User / Team / Total / WiFi / BLE / ADS-B / Mesh / Rank /
-API), the kind you can leave pinned in a server sidebar.
+at-a-glance display (User / Team / Total / WiFi / BLE / ADS-B / Mesh / Footprint
+/ Rank / API), the kind you can leave pinned in a server sidebar.
 
 Unlike discord_stats_webhook.py (which only needs a webhook URL), this needs a
 Discord **bot** because renaming channels is a bot action. Standard library
@@ -103,12 +103,12 @@ STATE_PATH = os.path.expanduser(
     os.environ.get("STATS_STATE_PATH", "~/.wdgwars-live-stats-state.json"))
 BASE = os.environ.get("WDGWARS_BASE_URL", "https://wdgwars.pl").rstrip("/")
 INTERVAL = int(os.environ.get("STATS_INTERVAL", "300"))
-USER_AGENT = "wdgwars-discord-stats/1.0 (+https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats)"
+USER_AGENT = "wdgwars-discord-stats/1.1 (+https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats)"
 
 # Order the fields appear in the category. Also the set of valid field names.
 FIELD_ORDER = ["User", "Team", "Gang Size", "Gang APs", "Updated", "Total",
-               "WiFi", "BLE", "ADS-B", "Mesh", "Reinforced", "Today", "Week",
-               "Credits", "Quota", "Rank", "API"]
+               "WiFi", "BLE", "ADS-B", "Mesh", "Reinforced", "Footprint",
+               "Today", "Week", "Credits", "Quota", "Rank", "API"]
 # Fields to hide via environment: STATS_FIELDS_OFF is a comma-separated list of
 # field labels, matched case-insensitively (e.g. "ble,rank,ads-b"). Useful where
 # the config file does not persist, e.g. GitHub Actions.
@@ -126,6 +126,13 @@ SAMPLE_ME = {
     "credits": {"balance": 1662}, "new_ap_limit": {"used": 340, "cap": 500000},
     "your_rank": {"all_time": 42, "today": None, "week": 17, "top_n": 100},
 }
+# Canned /api/me/cells for --sample: three tiles, 156 APs total.
+SAMPLE_CELLS = {
+    "ok": True, "grid_lat": 0.02, "grid_lng": 0.02, "count": 3,
+    "cells": [{"lat": 41.5, "lng": -80.94, "aps": 40},
+              {"lat": 41.56, "lng": -82.84, "aps": 100},
+              {"lat": 41.74, "lng": -81.04, "aps": 16}],
+}
 
 log = logging.getLogger("live-stats")
 
@@ -134,8 +141,8 @@ log = logging.getLogger("live-stats")
 REACTION_EMOJI = {
     "User": "👤", "Team": "🏴", "Gang Size": "👥", "Gang APs": "🏰",
     "Updated": "🕒", "Total": "📊", "WiFi": "📶", "BLE": "🔵", "ADS-B": "🛫",
-    "Mesh": "📡", "Reinforced": "🧱", "Today": "📅", "Week": "📆",
-    "Credits": "🪙", "Quota": "⛽", "Rank": "🎯", "API": "🔌",
+    "Mesh": "📡", "Reinforced": "🧱", "Footprint": "🗺", "Today": "📅",
+    "Week": "📆", "Credits": "🪙", "Quota": "⛽", "Rank": "🎯", "API": "🔌",
 }
 _BOT_ID = None
 
@@ -296,6 +303,21 @@ def rank_str(me: dict) -> str:
     return f">{top_n}"
 
 
+def footprint_aps(cells):
+    """Total APs you own, summed from the /api/me/cells server-aggregated per-cell
+    counts. This is the ownership-engine AP total, the number /api/me/aps can't
+    give once it truncates its point list. Returns None when the cells payload is
+    missing or invalid, so the caller can simply omit the Footprint field rather
+    than show a wrong zero."""
+    if not isinstance(cells, dict) or not cells.get("ok"):
+        return None
+    rows = cells.get("cells")
+    if not isinstance(rows, list):
+        return None
+    return sum(c["aps"] for c in rows
+               if isinstance(c, dict) and isinstance(c.get("aps"), int))
+
+
 def find_gang(lb: dict, gang_name: str):
     """Return (rank, entry) for gang_name in the leaderboard `gangs` array, or
     (None, None). Rank is the 1-based position; entry carries member_count and
@@ -321,9 +343,11 @@ def gather_stats(sample: bool = False):
         me, latency, status = SAMPLE_ME, 120, 200
         lb = {"gangs": [{"name": "Sample Gang", "member_count": 42,
                          "ap_count": 1234567}]}
+        cells = SAMPLE_CELLS
     else:
         me, latency, status = wdgo_api("/endpoint/me")
         lb = (wdgo_api("/endpoint/leaderboard")[0] or {}) if me else {}
+        cells = (wdgo_api("/endpoint/me/cells")[0] or {}) if me else {}
     api_ok = bool(me) and me.get("ok") is True
     me = me or {}
 
@@ -356,6 +380,13 @@ def gather_stats(sample: bool = False):
         "Rank":    f"🎯 Rank: {rank_str(me)}",
         "API":     api_line,
     }
+    # Footprint (total APs owned) from /api/me/cells, only when that endpoint
+    # answered. Omitted (no channel) on a server without it or a failed fetch,
+    # rather than shown as a misleading 0.
+    aps = footprint_aps(cells)
+    if aps is not None:
+        stats["Footprint"] = f"🗺 Footprint: {fmt_int(aps)} APs"
+
     # Gang stats from the leaderboard, only when the caller is in a gang that
     # appears on the board. Solo drivers simply don't get these channels.
     if ge:
