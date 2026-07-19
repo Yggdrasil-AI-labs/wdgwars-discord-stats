@@ -5,7 +5,7 @@ addopts = "-ra -q"
 
 [tool.coverage.run]
 branch = true
-source = ["live_stats_channels", "discord_stats_webhook"]
+source = ["live_stats_channels", "discord_stats_webhook", "war_feed"]
 omit = ["tests/*"]
 
 [tool.coverage.report]

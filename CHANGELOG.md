@@ -4,6 +4,36 @@ All notable changes to wdgwars-discord-stats are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-07-19 - War feed: event alerts, not just snapshots
+
+A third tool, `war_feed.py`. Where the other two show your current numbers, this
+posts a message **when something happens**, by remembering state between runs and
+diffing it.
+
+### Added
+
+- **`war_feed.py`** — a diff-and-post alerter with three detectors:
+  - **⚔ Captures** — new entries in `recent_captures` on `/api/me`, announced
+    once each (deduped by a per-capture fingerprint, since the feed has no id).
+  - **🛡 Territory losses** — cells that lost APs or vanished, derived by diffing
+    `/api/me/cells` between runs. WDGoWars exposes no defender-side loss feed, so
+    this is the only way to see you are being pushed back; drops are aggregated
+    into one message.
+  - **📴 Rig down / ✅ recovered** — a device whose `last_upload` crossed the
+    staleness threshold (`WARFEED_RIG_STALE_HOURS`, default 12), and its recovery
+    when it uploads again. Alerts once per state change, not every tick.
+- Posts through either a **webhook** (`DISCORD_WEBHOOK_URL`) or an existing
+  **bot** (`DISCORD_BOT_TOKEN` + `WARFEED_CHANNEL_ID`), batching embeds in tens.
+- First real run **seeds** state and stays silent (no backlog flood / false
+  rig-down); `--seed` does this on demand. `--sample`, `--dry-run`, `--once`,
+  `--schedule`/`--unschedule` mirror the other tools.
+- Alert selection via `WARFEED_ALERTS` (comma list of `captures,losses,rigs`).
+- `parse_ts` handles the raw Postgres `timestamptz` shape (space separator,
+  microseconds, 2-digit offset) that `datetime.fromisoformat` rejects before
+  Python 3.11.
+- 31 tests covering timestamp parsing, each detector, dedup, seeding, the
+  alert filter, batching, and the bot-vs-webhook post paths.
+
 ## [1.4.1] - 2026-07-17 - Manage Messages for pinning; LXC notes
 
 From a detailed field report by **Vito**, who deployed on a Proxmox unprivileged

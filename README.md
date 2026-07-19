@@ -32,7 +32,10 @@ Part of the WDGoWars feeder and tooling family:
    sidebar dashboard look. Needs a Discord bot. You pick which fields to show.
 2. **Webhook post** (`discord_stats_webhook.py`): posts a stats embed to a
    channel via an incoming webhook. No bot, just a webhook URL. Simplest.
-3. A [consolidated WDGoWars API reference](docs/api-reference.md) so you can
+3. **War feed** (`war_feed.py`): posts a message *when something happens* —
+   you captured APs, you lost territory, or a rig stopped uploading. It
+   remembers state between runs and diffs it. Webhook or bot, your choice.
+4. A [consolidated WDGoWars API reference](docs/api-reference.md) so you can
    build something bigger.
 
 **New here?** [GETTING-STARTED.md](GETTING-STARTED.md) is a full zero-to-running
@@ -208,6 +211,48 @@ Not everyone wants every number public. Easiest first:
    then drop it to post your real numbers.
 
 That is the whole thing. Put it on a cron if you want a daily stats post.
+
+## Option C: war feed (event alerts)
+
+Options A and B show your current numbers. This one is different: it posts a
+message **when something changes**, so a channel becomes a live feed of what is
+happening to your account rather than a static scoreboard. It fetches your data
+each tick, compares it to the last tick (kept in a small state file), and posts:
+
+- **⚔ Captures** — you took APs from someone, from `recent_captures` on
+  `/api/me`.
+- **🛡 Territory losses** — cells you owned lost APs or vanished. WDGoWars has
+  no defender-side loss feed, so this is derived locally by diffing
+  `/api/me/cells` between runs. It is the only way to see you are being pushed
+  back.
+- **📴 Rig down / ✅ recovered** — a device stopped uploading past a threshold
+  (default 12 h), or came back, from the per-rig `last_upload` in the `devices`
+  array.
+
+Post through a webhook (like Option B) or reuse a bot you already run for
+Option A:
+
+```sh
+export WDGWARS_API_KEY="your-64-char-key"
+# either a webhook…
+export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+# …or an existing bot + the target channel id
+export DISCORD_BOT_TOKEN="your-bot-token"
+export WARFEED_CHANNEL_ID="123456789012345678"
+
+python war_feed.py --sample --dry-run   # see all three alert types, no key/post
+python war_feed.py --seed               # remember current state, post nothing
+python war_feed.py --once               # one diff-and-post pass
+python war_feed.py                        # loop (default every 5 min)
+python war_feed.py --schedule            # install a boot-persistent runner
+```
+
+The first real run **seeds** state and stays quiet on purpose, so you do not get
+a burst of 20 old captures or a false rig-down. Alerts begin on the next tick.
+
+Tunables (all optional): `WARFEED_ALERTS` (comma list of `captures,losses,rigs`,
+default all), `WARFEED_RIG_STALE_HOURS` (default 12), `WARFEED_INTERVAL` (default
+300), `WARFEED_STATE_PATH`, `WARFEED_TZ`.
 
 ## Requirements
 

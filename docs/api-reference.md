@@ -94,7 +94,7 @@ library's transport code):
 | `mesh` | int | MeshCore nodes credited to you. |
 | `total` | int | Flat sum of `wifi + ble + aircraft + mesh` (each type counts equally). |
 | `your_rank` | object | `{all_time, today, week, top_n}`. Your rank per board, or `null` for a board where you fall outside the cached window (`top_n`, server default 100). Shipped 2026-06-03. |
-| `recent_captures` | array | Up to ~20 of your most recent territory captures, newest first, attacker-side only. Each: `{when, defender_gang, ap_count}` (`when` is a naive UTC `YYYY-MM-DD HH:MM:SS` string). Shipped 2026-06-03. |
+| `recent_captures` | array | Up to ~20 of your most recent territory captures, newest first, attacker-side only. Each: `{when, ap_count, lat, lng, defender_gang_id, defender_gang}` (`when` is a naive UTC `YYYY-MM-DD HH:MM:SS` string; `defender_gang*` are null for unclaimed territory). Shipped 2026-06-03. There is no per-capture id, so a client that announces each capture once must fingerprint by these fields (see `war_feed.py`). |
 | `devices` | array | Per-rig contribution breakdown, one row per API-key `device_name`. Shipped 2026-07-17. See below. |
 
 Also observed: `gang_id`, `gang_role`, and an earned `badges` list. Exact keys can
