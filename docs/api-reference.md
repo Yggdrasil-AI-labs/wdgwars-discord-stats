@@ -1,6 +1,6 @@
-# WDGoWars API reference
+# WDGWars API reference
 
-A consolidated map of the [WDGoWars](https://wdgwars.pl) HTTP API, focused on the
+A consolidated map of the [WDGWars](https://wdgwars.pl) HTTP API, focused on the
 read endpoints you need to build things on top of your own account: a stats
 display, a Discord bot, a dashboard, a "how am I doing" widget.
 
@@ -401,7 +401,7 @@ the per-rig `devices` array documented here.
 ## Sources and attribution
 
 Compiled from operating the public feeder family against `wdgwars.pl` and from
-LOCOSP's answers in the WDGoWars Discord (2026-06-02 and 2026-06-09). Maintained
+LOCOSP's answers in the WDGWars Discord (2026-06-02 and 2026-06-09). Maintained
 by Hiro AlleyCat ([github.com/HiroAlleyCat](https://github.com/HiroAlleyCat)).
 
 Corrections welcome: open an issue if the live API disagrees with anything here.

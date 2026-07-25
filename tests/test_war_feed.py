@@ -1,6 +1,6 @@
 """Unit tests for war_feed.py.
 
-Pure-logic and network-mocked tests only: no real WDGoWars or Discord calls.
+Pure-logic and network-mocked tests only: no real WDGWars or Discord calls.
 """
 from __future__ import annotations
 

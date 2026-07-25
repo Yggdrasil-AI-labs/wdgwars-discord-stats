@@ -1,12 +1,12 @@
 # Getting started
 
-Zero to a live WDGoWars stats display in your Discord. The only manual part is
+Zero to a live WDGWars stats display in your Discord. The only manual part is
 making a bot (step 2); everything else is one command.
 
 ## What you need
 - Python 3.9+ (`python --version`)
 - A Discord server where you have admin / Manage Server
-- A WDGoWars account
+- A WDGWars account
 
 ## Step 1: get the code
 ```sh
@@ -90,7 +90,7 @@ local option if that matters to you.
 
 ## Good to know
 - Toggles are not instant; they apply on the next 5-minute tick.
-- It only reads `/api/me`, it never uploads or changes your WDGoWars account.
+- It only reads `/api/me`, it never uploads or changes your WDGWars account.
 - Discord rate-limits channel renames; if you restart often in a short window,
   the tool backs off and catches up. That is normal.
 - No always-on machine? Use the GitHub Actions option, no server required.

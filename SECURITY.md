@@ -1,12 +1,12 @@
 # Security Notes
 
-This tool touches two credentials (a WDGoWars API key and a Discord bot token or
+This tool touches two credentials (a WDGWars API key and a Discord bot token or
 webhook URL) and makes changes in your Discord server. Here is exactly what it
 does with them and what it does not.
 
 ## What this tool does
 
-- Reads your WDGoWars stats from `GET /endpoint/me` and `GET /endpoint/leaderboard`.
+- Reads your WDGWars stats from `GET /endpoint/me` and `GET /endpoint/leaderboard`.
 - Renames voice channels, posts and edits a control-panel message, and reads
   reactions on that message (voice-channel display), or posts one embed to a
   webhook (webhook mode).
@@ -15,11 +15,11 @@ does with them and what it does not.
 
 ## What this tool **does not** do
 
-- It never calls any WDGoWars write/upload endpoint. It cannot change your
-  WDGoWars account, score, or territory.
+- It never calls any WDGWars write/upload endpoint. It cannot change your
+  WDGWars account, score, or territory.
 - It never opens a Discord gateway/WebSocket connection, so it will not clash
   with a bot you already run on the same token.
-- It never sends your key, token, or stats anywhere except WDGoWars and your own
+- It never sends your key, token, or stats anywhere except WDGWars and your own
   Discord server.
 - It has no telemetry, no analytics, and no network calls other than the two
   hosts above.
@@ -35,7 +35,7 @@ does with them and what it does not.
 
 ## What the API key can do
 
-Per WDGoWars, all keys on your account are functionally equivalent: there is no
+Per WDGWars, all keys on your account are functionally equivalent: there is no
 per-key scoping. A leaked key lets someone read your `/api/me` and upload records
 as you. It cannot change your password or delete your account. If a key leaks,
 rotate it at `wdgwars.pl/profile`.
@@ -71,7 +71,7 @@ running, and understand that the credentials leave your device in that case.
 ## Threat model - what this tool defends against
 
 - **Credential disclosure in logs/errors:** secrets are redacted from all output.
-- **Accidental account changes:** the tool is read-only against WDGoWars; there is
+- **Accidental account changes:** the tool is read-only against WDGWars; there is
   no code path that writes to your account.
 - **Over-permissioned bot:** documentation and the `--check` doctor steer you to
   the single Manage Channels permission, not Administrator.

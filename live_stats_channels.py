@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Live WDGoWars stats as Discord voice-channel labels.
+"""Live WDGWars stats as Discord voice-channel labels.
 
 Renames a set of voice channels in a "live stats" category so their names
-show your current WDGoWars numbers, updated on a schedule. This is the
+show your current WDGWars numbers, updated on a schedule. This is the
 at-a-glance display (User / Team / Total / WiFi / BLE / ADS-B / Mesh / Footprint
 / Rank / API), the kind you can leave pinned in a server sidebar.
 
@@ -12,7 +12,7 @@ only.
 
 Setup
 -----
-1. Get your WDGoWars API key from https://wdgwars.pl/profile
+1. Get your WDGWars API key from https://wdgwars.pl/profile
 2. Create a Discord bot (https://discord.com/developers/applications), copy its
    token, and invite it with "Manage Channels" + "Manage Roles" + "Manage
    Messages". Only Manage Channels is strictly required; Manage Roles lets setup
@@ -344,9 +344,9 @@ def discord_api(method: str, path: str, body=None):
     return None
 
 
-# ── WDGoWars API ─────────────────────────────────────────────────────────────
+# ── WDGWars API ─────────────────────────────────────────────────────────────
 def wdgo_api(path: str, timeout: float = 8.0):
-    """GET a WDGoWars endpoint. Returns (data|None, latency_ms, http_status)."""
+    """GET a WDGWars endpoint. Returns (data|None, latency_ms, http_status)."""
     if not WDGO_KEY:
         return None, 0, 0
     req = urllib.request.Request(f"{BASE}{path}", headers={
@@ -433,7 +433,7 @@ def gather_stats(sample: bool = False):
     """Build the label->value map for every field (before visibility filter).
     Returns (stats, devices, api_ok): stats is the fixed-field map, devices is
     the per-rig {label: channel_name} for the Devices section, and api_ok is
-    False when WDGoWars was unreachable so the caller can avoid overwriting good
+    False when WDGWars was unreachable so the caller can avoid overwriting good
     numbers with the zero fallbacks."""
     now_local = datetime.now(TZ)
     tz_label = now_local.tzname() or "UTC"
@@ -777,7 +777,7 @@ def active_channels(cfg: dict, stats: dict, devices: dict) -> dict:
 
 
 def _refresh_api_channel(api_name: str) -> None:
-    """Rename only the API-status channel. Used when WDGoWars is down so the
+    """Rename only the API-status channel. Used when WDGWars is down so the
     status flips to DOWN without touching the data channels. No-op if the field
     is hidden or the category/channel is absent."""
     if not api_name:
@@ -802,7 +802,7 @@ def tick(state: dict, sample: bool = False) -> None:
     stats, devices, api_ok = gather_stats(sample=sample)
     active = active_channels(cfg, stats, devices)
 
-    # When WDGoWars is unreachable its counts fall back to zero. Don't repaint
+    # When WDGWars is unreachable its counts fall back to zero. Don't repaint
     # the whole dashboard with 0s over good numbers: flip only the API channel
     # to DOWN and leave the data channels showing their last good values.
     if not sample and not api_ok:
@@ -854,7 +854,7 @@ def dry_run(sample: bool) -> int:
 
 
 def preflight():
-    """Validate config against Discord + WDGoWars before doing any work.
+    """Validate config against Discord + WDGWars before doing any work.
     Returns (checks, can_write, key_ok): checks is a list of (ok, message);
     can_write is True only if the bot token + guild + Manage Channels all pass;
     key_ok is True/False/None (None = no key set to test)."""
@@ -915,7 +915,7 @@ def preflight():
     if WDGO_KEY:
         m2, _, status = wdgo_api("/endpoint/me")
         key_ok = bool(m2 and m2.get("ok"))
-        checks.append((key_ok, f"WDGoWars key OK (user {m2.get('username')})" if key_ok
+        checks.append((key_ok, f"WDGWars key OK (user {m2.get('username')})" if key_ok
                        else f"wdgwars.pl rejected your API key (HTTP {status}). "
                             "Re-copy it from wdgwars.pl/profile."))
     else:
@@ -938,7 +938,7 @@ def run_wizard() -> bool:
     print("No configuration found. Let's set it up (saved to a local .env file).\n"
           "Get your API key from wdgwars.pl/profile, and your bot token + server id\n"
           "from the Discord Developer Portal (see the README if you have not made a bot).\n")
-    key = getpass.getpass("WDGoWars API key (hidden): ").strip()
+    key = getpass.getpass("WDGWars API key (hidden): ").strip()
     token = getpass.getpass("Discord bot token (hidden): ").strip()
     guild = input("Discord server (guild) id: ").strip()
     if not (key and token and guild):
@@ -1024,7 +1024,7 @@ def _install_systemd(script: str) -> int:
                      "# (create it, or rely on the .env beside the script)")
     unit = (
         "[Unit]\n"
-        "Description=WDGoWars live-stats Discord display\n"
+        "Description=WDGWars live-stats Discord display\n"
         "After=network-online.target\n"
         "Wants=network-online.target\n\n"
         "[Service]\n"
@@ -1095,7 +1095,7 @@ def remove_schedule() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Show WDGoWars stats as Discord voice-channel labels.")
+        description="Show WDGWars stats as Discord voice-channel labels.")
     parser.add_argument("--once", action="store_true",
                         help="run a single update and exit")
     parser.add_argument("--dry-run", action="store_true",

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="wdgwars-discord-stats - your live WDGoWars numbers in your Discord sidebar" width="100%"/>
+  <img src="assets/banner.svg" alt="wdgwars-discord-stats - your live WDGWars numbers in your Discord sidebar" width="100%"/>
 </p>
 
 <p align="center">
@@ -11,14 +11,14 @@
 
 # wdgwars-discord-stats
 
-Build your own [WDGoWars](https://wdgwars.pl) stats display in Discord: a live
+Build your own [WDGWars](https://wdgwars.pl) stats display in Discord: a live
 voice-channel dashboard, a one-shot webhook poster, and a consolidated API
 reference so you can build something bigger. Standard-library Python, no
 dependencies to install.
 
 ## Family
 
-Part of the WDGoWars feeder and tooling family:
+Part of the WDGWars feeder and tooling family:
 
 - [Muninn](https://github.com/Yggdrasil-AI-labs/adsb-to-wdgwars) - ADS-B feeder
 - [Heimdall](https://github.com/Yggdrasil-AI-labs/meshcore-to-wdgwars) - MeshCore LoRa feeder
@@ -35,7 +35,7 @@ Part of the WDGoWars feeder and tooling family:
 3. **War feed** (`war_feed.py`): posts a message *when something happens* —
    you captured APs, you lost territory, or a rig stopped uploading. It
    remembers state between runs and diffs it. Webhook or bot, your choice.
-4. A [consolidated WDGoWars API reference](docs/api-reference.md) so you can
+4. A [consolidated WDGWars API reference](docs/api-reference.md) so you can
    build something bigger.
 
 **New here?** [GETTING-STARTED.md](GETTING-STARTED.md) is a full zero-to-running
@@ -221,7 +221,7 @@ each tick, compares it to the last tick (kept in a small state file), and posts:
 
 - **⚔ Captures** — you took APs from someone, from `recent_captures` on
   `/api/me`.
-- **🛡 Territory losses** — cells you owned lost APs or vanished. WDGoWars has
+- **🛡 Territory losses** — cells you owned lost APs or vanished. WDGWars has
   no defender-side loss feed, so this is derived locally by diffing
   `/api/me/cells` between runs. It is the only way to see you are being pushed
   back.
@@ -281,7 +281,7 @@ endpoints you can build on.
 
 This is a community tool, not official LOCOSP software. The API reference is
 compiled from operating the public feeders and from LOCOSP's answers in the
-WDGoWars Discord. If the live API disagrees with the docs, open an issue.
+WDGWars Discord. If the live API disagrees with the docs, open an issue.
 
 Maintained by Hiro AlleyCat ([github.com/HiroAlleyCat](https://github.com/HiroAlleyCat)).
 

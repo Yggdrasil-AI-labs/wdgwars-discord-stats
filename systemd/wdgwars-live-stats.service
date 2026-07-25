@@ -1,5 +1,5 @@
 [Unit]
-Description=WDGoWars live-stats Discord display
+Description=WDGWars live-stats Discord display
 After=network-online.target
 Wants=network-online.target
 

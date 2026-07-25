@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WDGoWars "war feed": event alerts to Discord, not just a snapshot.
+"""WDGWars "war feed": event alerts to Discord, not just a snapshot.
 
 Where discord_stats_webhook.py posts a point-in-time card and
 live_stats_channels.py keeps a sidebar of current numbers, this posts a message
@@ -8,7 +8,7 @@ so it can tell you about:
 
 - **Captures** — you took APs from someone (from /api/me `recent_captures`).
 - **Territory losses** — cells you owned lost APs or disappeared (diffing
-  /api/me/cells between runs). WDGoWars has no defender-side loss feed, so this
+  /api/me/cells between runs). WDGWars has no defender-side loss feed, so this
   is the only way to know you're being pushed back; the tool derives it locally.
 - **Rig down / recovered** — a device stopped uploading for too long, or came
   back (from the per-rig `last_upload` in /api/me `devices`).
@@ -183,7 +183,7 @@ def _capture_key(c: dict) -> str:
 
 
 def parse_ts(value):
-    """Parse a WDGoWars timestamp into an aware datetime, or None.
+    """Parse a WDGWars timestamp into an aware datetime, or None.
 
     last_upload / capture `when` arrive as raw Postgres timestamptz like
     '2026-07-17 02:32:02.854003+00' (space separator, microseconds, 2-digit
@@ -220,7 +220,7 @@ def _short_loc(lat, lng) -> str:
 
 
 def _map_url(lat, lng):
-    """A link to the WDGoWars map centered on a location, or None if coords are
+    """A link to the WDGWars map centered on a location, or None if coords are
     unusable. Uses only lat/lng in the fragment (no personal data in the query)."""
     try:
         return f"{BASE}/map#15/{float(lat):.5f}/{float(lng):.5f}"
@@ -250,9 +250,9 @@ def save_state(state: dict) -> None:
         log.warning("write state failed: %s", scrub(str(e)))
 
 
-# ── WDGoWars API ─────────────────────────────────────────────────────────────
+# ── WDGWars API ─────────────────────────────────────────────────────────────
 def wdgo_api(path: str, timeout: float = 10.0):
-    """GET a WDGoWars endpoint. Returns parsed JSON or None. Uses /endpoint/*,
+    """GET a WDGWars endpoint. Returns parsed JSON or None. Uses /endpoint/*,
     the permanent contract alias Cloudflare rewrites /api/* to at the edge."""
     if not WDGO_KEY:
         return None
@@ -416,7 +416,7 @@ def detect_rigs(me: dict, state: dict, now: datetime) -> list:
 
 
 def gather(sample: bool):
-    """Fetch (me, cells) from WDGoWars, or the canned sample pair."""
+    """Fetch (me, cells) from WDGWars, or the canned sample pair."""
     if sample:
         return SAMPLE_ME, SAMPLE_CELLS
     me = wdgo_api("/endpoint/me")
@@ -479,7 +479,7 @@ def post_embeds(embeds: list) -> bool:
         batch = embeds[i:i + 10]
         if WEBHOOK_URL:
             ok &= _post(WEBHOOK_URL,
-                        {"username": "WDGoWars War Feed", "embeds": batch})
+                        {"username": "WDGWars War Feed", "embeds": batch})
         elif BOT_TOKEN and CHANNEL_ID:
             ok &= _post(f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages",
                         {"embeds": batch}, token=BOT_TOKEN)
@@ -592,7 +592,7 @@ def _install_systemd(script: str) -> int:
                      "# (create it, or rely on the .env beside the script)")
     unit = (
         "[Unit]\n"
-        "Description=WDGoWars war-feed Discord alerter\n"
+        "Description=WDGWars war-feed Discord alerter\n"
         "After=network-online.target\n"
         "Wants=network-online.target\n\n"
         "[Service]\n"
@@ -658,7 +658,7 @@ def remove_schedule() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Post WDGoWars capture / loss / rig-down alerts to Discord.")
+        description="Post WDGWars capture / loss / rig-down alerts to Discord.")
     parser.add_argument("--once", action="store_true",
                         help="run a single diff-and-post pass and exit")
     parser.add_argument("--dry-run", action="store_true",

@@ -161,7 +161,7 @@ too fast, Discord rate-limits channel renames.
 
 ### Is it safe for my account?
 Yes. It only reads `/api/me` and the leaderboard. It never uploads, never
-changes your WDGoWars account, and your key is read from the environment, never
+changes your WDGWars account, and your key is read from the environment, never
 logged, and redacted from any error output.
 
 ### Something's not working.

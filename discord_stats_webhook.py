@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Post your WDGoWars stats to a Discord channel via an incoming webhook.
+"""Post your WDGWars stats to a Discord channel via an incoming webhook.
 
 This is a complete, dependency-free example of building your own thing on the
-WDGoWars API. It reads your ``/api/me`` stats and posts them as a Discord embed.
+WDGWars API. It reads your ``/api/me`` stats and posts them as a Discord embed.
 No bot token, no hosting, no OAuth: a Discord webhook URL is all you need.
 
 Standard library only. Copy it, change it, run it on a cron. See
@@ -225,10 +225,10 @@ def build_embed(me: dict, footprint=None) -> dict:
               if devices else f"via {src}")
 
     return {
-        "username": "WDGoWars Stats",
+        "username": "WDGWars Stats",
         "embeds": [
             {
-                "title": f"{username} on WDGoWars",
+                "title": f"{username} on WDGWars",
                 "description": description,
                 "url": "https://wdgwars.pl/profile",
                 "color": 0xB08850,  # matches the gungnir badge accent
@@ -261,7 +261,7 @@ def post_to_discord(webhook_url: str, payload: dict) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Post WDGoWars stats to a Discord webhook.")
+    parser = argparse.ArgumentParser(description="Post WDGWars stats to a Discord webhook.")
     parser.add_argument(
         "--dry-run",
         action="store_true",

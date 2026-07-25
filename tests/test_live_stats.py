@@ -1,6 +1,6 @@
 """Unit tests for live_stats_channels.py.
 
-Pure-logic and network-mocked tests only: no real Discord or WDGoWars calls.
+Pure-logic and network-mocked tests only: no real Discord or WDGWars calls.
 Run: python -m pytest tests/ (or pytest --cov=live_stats_channels).
 """
 from __future__ import annotations
