@@ -58,7 +58,7 @@ jobs:
       - name: SonarCloud scan and quality gate
         # sonar.qualitygate.wait=true (in sonar-project.properties) makes this
         # step fail the job when the gate fails, not just report it.
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
