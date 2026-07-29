@@ -617,7 +617,9 @@ def poll_reactions(cfg: dict) -> bool:
                 continue
             cfg.setdefault("fields", {})[label] = not field_enabled(cfg, label)
             changed = True
-            log.info("toggled %r -> %s via reaction", label, cfg["fields"][label])
+            # bool() so a config-file value never flows into the log verbatim
+            # (S5145); the field is a toggle, True/False is all there is to say.
+            log.info("toggled %r -> %s via reaction", label, bool(cfg["fields"][label]))
             for u in pressers:
                 discord_api(
                     "DELETE",
@@ -798,7 +800,12 @@ def tick(state: dict, sample: bool = False) -> None:
     cfg = load_config()
     poll_reactions(cfg)
 
-    t = state.get("tick", 0)
+    # int() so a hand-edited state file can neither crash the arithmetic nor
+    # inject anything into the tick log lines (S5145).
+    try:
+        t = int(state.get("tick", 0))
+    except (TypeError, ValueError):
+        t = 0
     stats, devices, api_ok = gather_stats(sample=sample)
     active = active_channels(cfg, stats, devices)
 

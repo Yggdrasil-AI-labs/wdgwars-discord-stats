@@ -12,14 +12,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   # Stage 1: run pytest, produce coverage.xml.
   test:
     name: Test and coverage
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -53,6 +52,7 @@ jobs:
     name: SonarCloud quality gate
     needs: test
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Wait for Automatic Analysis and check the quality gate
         run: |
@@ -85,6 +85,8 @@ jobs:
     name: Snyk dependency scan
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - name: Check preconditions (token, runtime manifest)
@@ -105,14 +107,16 @@ jobs:
           fi
       - name: Snyk Open Source scan, dev deps (fail on high or critical)
         if: steps.pre.outputs.has_token == 'true'
-        uses: snyk/actions/python@master
+        # Pinned to a full SHA (githubactions:S7637); master as of 2026-07-29.
+        uses: snyk/actions/python@8e119fbb6c251787721d34ba683ed48eba792766
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           args: --file=requirements-dev.txt --package-manager=pip --severity-threshold=high
       - name: Snyk Open Source scan, runtime deps (fail on high or critical)
         if: steps.pre.outputs.has_token == 'true' && steps.pre.outputs.has_runtime == 'true'
-        uses: snyk/actions/python@master
+        # Pinned to a full SHA (githubactions:S7637); master as of 2026-07-29.
+        uses: snyk/actions/python@8e119fbb6c251787721d34ba683ed48eba792766
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
@@ -120,7 +124,8 @@ jobs:
       - name: Snyk monitor (track shipped deps for new CVEs)
         if: github.ref == 'refs/heads/main' && steps.pre.outputs.has_token == 'true' && steps.pre.outputs.has_runtime == 'true'
         continue-on-error: true
-        uses: snyk/actions/python@master
+        # Pinned to a full SHA (githubactions:S7637); master as of 2026-07-29.
+        uses: snyk/actions/python@8e119fbb6c251787721d34ba683ed48eba792766
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
@@ -133,6 +138,8 @@ jobs:
     needs: [sonarcloud, snyk]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - name: Stage release bundle
