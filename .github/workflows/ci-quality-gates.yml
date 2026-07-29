@@ -1,17 +1,25 @@
 name: ci-quality-gates
 
-# Gated pipeline: test + coverage -> Snyk -> release bundle.
-# The package stage only runs if the gates pass. The lightweight ci.yml
-# workflow stays as the offline smoke suite; this adds the code-quality and
-# security gates on top, matching the rest of the feeder family.
+# Gated pipeline: test + coverage -> release bundle. The lightweight ci.yml
+# workflow stays as the offline smoke suite; this adds coverage and the
+# release artifact on top.
 #
-# SonarCloud is deliberately NOT a job here. Its GitHub App runs Automatic
-# Analysis on every push and PR and posts its own "SonarCloud Code Analysis"
-# check, scoped to the changed files. A CI-side scanner conflicts with
-# Automatic Analysis (it 403'd on every run this repo ever had), and polling
-# the gate API from CI just re-reports the same analysis less accurately,
-# against main's whole new-code period instead of the diff. Coverage is
-# enforced by the pytest fail_under ratchet in pyproject.toml.
+# Two scanners that the other feeders run in CI are deliberately absent here,
+# because on this repo each would be a redundant second opinion:
+#
+# SonarCloud - its GitHub App runs Automatic Analysis on every push and PR and
+# posts its own "SonarCloud Code Analysis" check, scoped to the changed files.
+# A CI-side scanner conflicts with Automatic Analysis (it 403'd on every run
+# this repo ever had), and polling the gate API from CI re-reports the same
+# analysis less accurately, against main's whole new-code period instead of
+# the diff. Coverage is enforced by the pytest fail_under ratchet instead
+# (pyproject.toml), since Automatic Analysis does not ingest coverage.xml.
+#
+# Snyk - this tool ships stdlib-only, so requirements.txt is comments-only and
+# the only declared packages are pytest and pytest-cov. GitHub's own Dependabot
+# already watches those and opens version PRs. A Snyk job here needs a
+# SNYK_TOKEN this repo does not have and would scan nothing that Dependabot
+# misses. Add it back alongside the first real runtime dependency.
 
 on:
   push:
@@ -49,44 +57,10 @@ jobs:
           path: coverage.xml
           retention-days: 7
 
-  # Stage 2: Snyk software composition analysis. Only requirements-dev.txt is
-  # scanned: the shipped tool is stdlib-only, so requirements.txt is
-  # comments-only and Snyk hard-errors on an empty manifest (SNYK-OS-0012)
-  # rather than passing. Add a runtime scan step when a real dependency lands.
-  snyk:
-    name: Snyk dependency scan
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      # Secrets are not readable in a job-level `if`, so the token check is a
-      # step. Without a token the scan is skipped, not failed.
-      - name: Check for a Snyk token
-        id: pre
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-          if [ -n "$SNYK_TOKEN" ]; then
-            echo "has_token=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_token=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::SNYK_TOKEN is not configured for this repository (no repo secret, and the org has none). Snyk scan skipped; add the secret to enable it."
-          fi
-      - name: Snyk Open Source scan, dev deps (fail on high or critical)
-        if: steps.pre.outputs.has_token == 'true'
-        # Pinned to a full SHA (githubactions:S7637); master as of 2026-07-29.
-        uses: snyk/actions/python@8e119fbb6c251787721d34ba683ed48eba792766
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --file=requirements-dev.txt --package-manager=pip --severity-threshold=high
-
-  # Stage 3: build the release bundle. Only if the gates passed, main only.
+  # Stage 2: build the release bundle. Only if tests passed, main only.
   package:
     name: Build release artifact
-    needs: [snyk]
+    needs: [test]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
