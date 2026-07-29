@@ -42,26 +42,39 @@ jobs:
           path: coverage.xml
           retention-days: 7
 
-  # Stage 2a: SonarCloud static analysis + quality gate (reads coverage.xml).
+  # Stage 2a: SonarCloud quality gate. Analysis itself is done by SonarCloud's
+  # Automatic Analysis (the GitHub app), which analyzes every push and PR with
+  # no token; this job polls the public API for the resulting quality gate and
+  # fails when the gate does. The previous in-CI scanner conflicted with
+  # Automatic Analysis and 403'd on every run this repo ever had. Trade-off:
+  # Automatic Analysis does not ingest coverage.xml, so coverage lives in the
+  # pytest fail_under ratchet (pyproject.toml), not on SonarCloud.
   sonarcloud:
     name: SonarCloud quality gate
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Download coverage report
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-xml
-      - name: SonarCloud scan and quality gate
-        # sonar.qualitygate.wait=true (in sonar-project.properties) makes this
-        # step fail the job when the gate fails, not just report it.
-        uses: SonarSource/sonarqube-scan-action@v8
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: https://sonarcloud.io
+      - name: Wait for Automatic Analysis and check the quality gate
+        run: |
+          key="Yggdrasil-AI-labs_wdgwars-discord-stats"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            scope="pullRequest=${{ github.event.pull_request.number }}"
+          else
+            scope="branch=main"
+          fi
+          for i in $(seq 1 10); do
+            status=$(curl -sf "https://sonarcloud.io/api/qualitygates/project_status?projectKey=${key}&${scope}" | jq -r '.projectStatus.status')
+            echo "attempt ${i}: quality gate = ${status}"
+            case "$status" in
+              OK) exit 0 ;;
+              ERROR)
+                echo "::error::SonarCloud quality gate is failing: https://sonarcloud.io/project/overview?id=${key}"
+                exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "::error::quality gate status unavailable after 10 attempts (Automatic Analysis may not have finished or may be disabled)"
+          exit 1
 
   # Stage 2b: Snyk software composition analysis. The tool is stdlib-only:
   # requirements.txt is comments-only, and Snyk hard-errors on an empty
@@ -74,33 +87,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - name: Check for runtime dependencies
-        id: deps
+      - name: Check preconditions (token, runtime manifest)
+        id: pre
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
+          if [ -n "$SNYK_TOKEN" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::SNYK_TOKEN is not configured for this repository (no repo secret, and the org has none). Snyk scan skipped; add the secret to enable it."
+          fi
           if grep -vE '^\s*(#|$)' requirements.txt > /dev/null; then
             echo "has_runtime=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_runtime=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Snyk Open Source scan, dev deps (fail on high or critical)
+        if: steps.pre.outputs.has_token == 'true'
         uses: snyk/actions/python@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           args: --file=requirements-dev.txt --package-manager=pip --severity-threshold=high
       - name: Snyk Open Source scan, runtime deps (fail on high or critical)
-        if: steps.deps.outputs.has_runtime == 'true'
+        if: steps.pre.outputs.has_token == 'true' && steps.pre.outputs.has_runtime == 'true'
         uses: snyk/actions/python@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           args: --file=requirements.txt --package-manager=pip --severity-threshold=high
       - name: Snyk monitor (track shipped deps for new CVEs)
-        if: github.ref == 'refs/heads/main' && steps.deps.outputs.has_runtime == 'true'
+        if: github.ref == 'refs/heads/main' && steps.pre.outputs.has_token == 'true' && steps.pre.outputs.has_runtime == 'true'
         continue-on-error: true
         uses: snyk/actions/python@master
         env:
