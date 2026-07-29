@@ -63,9 +63,11 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
 
-  # Stage 2b: Snyk software composition analysis. The tool is stdlib-only, so
-  # there is nothing in requirements.txt to flag today; this runs for parity
-  # and catches the moment a real dependency is ever added.
+  # Stage 2b: Snyk software composition analysis. The tool is stdlib-only:
+  # requirements.txt is comments-only, and Snyk hard-errors on an empty
+  # manifest (SNYK-OS-0012) instead of passing, so the runtime scan only
+  # runs once requirements.txt gains a real entry. The dev manifest has
+  # real dependencies (pytest and friends) and is scanned on every run.
   snyk:
     name: Snyk dependency scan
     needs: test
@@ -76,21 +78,36 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Snyk Open Source scan (fail on high or critical)
+      - name: Check for runtime dependencies
+        id: deps
+        run: |
+          if grep -vE '^\s*(#|$)' requirements.txt > /dev/null; then
+            echo "has_runtime=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_runtime=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Snyk Open Source scan, dev deps (fail on high or critical)
         uses: snyk/actions/python@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --file=requirements.txt --severity-threshold=high
+          args: --file=requirements-dev.txt --package-manager=pip --severity-threshold=high
+      - name: Snyk Open Source scan, runtime deps (fail on high or critical)
+        if: steps.deps.outputs.has_runtime == 'true'
+        uses: snyk/actions/python@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --file=requirements.txt --package-manager=pip --severity-threshold=high
       - name: Snyk monitor (track shipped deps for new CVEs)
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && steps.deps.outputs.has_runtime == 'true'
         continue-on-error: true
         uses: snyk/actions/python@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           command: monitor
-          args: --file=requirements.txt
+          args: --file=requirements.txt --package-manager=pip
 
   # Stage 3: build the release bundle. Only if both gates passed, main only.
   package:
