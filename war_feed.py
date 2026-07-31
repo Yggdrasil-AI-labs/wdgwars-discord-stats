@@ -6,11 +6,11 @@ live_stats_channels.py keeps a sidebar of current numbers, this posts a message
 *when something happens*. It remembers the last state between runs and diffs it,
 so it can tell you about:
 
-- **Captures** — you took APs from someone (from /api/me `recent_captures`).
-- **Territory losses** — cells you owned lost APs or disappeared (diffing
+- **Captures**: you took APs from someone (from /api/me `recent_captures`).
+- **Territory losses**: cells you owned lost APs or disappeared (diffing
   /api/me/cells between runs). WDGWars has no defender-side loss feed, so this
   is the only way to know you're being pushed back; the tool derives it locally.
-- **Rig down / recovered** — a device stopped uploading for too long, or came
+- **Rig down / recovered**: a device stopped uploading for too long, or came
   back (from the per-rig `last_upload` in /api/me `devices`).
 
 Standard library only, like the rest of this repo. Post either through a Discord
@@ -365,7 +365,7 @@ def detect_losses(cells: dict, state: dict) -> list:
                  + f" across {lost_cells} cell" + ("s" if lost_cells != 1 else ""),
         "description": "\n".join(lines),
         "color": COLOR_LOSS,
-        "footer": {"text": "derived by diffing /api/me/cells — there is no "
+        "footer": {"text": "derived by diffing /api/me/cells. There is no "
                            "server loss feed"},
     }]
 

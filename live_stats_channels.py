@@ -212,9 +212,9 @@ def bot_id() -> str:
 
 
 # Discord permission bits and what each is for here:
-#   Manage Channels  — create/rename/delete the stat voice channels (required).
-#   Manage Roles     — set the overwrite that makes #stats-config private.
-#   Manage Messages  — pin the section panels in #stats-config.
+#   Manage Channels - create/rename/delete the stat voice channels (required).
+#   Manage Roles - set the overwrite that makes #stats-config private.
+#   Manage Messages - pin the section panels in #stats-config.
 # The invite requests all three so setup works cleanly out of the box; a missing
 # one degrades gracefully (public config channel, and/or unpinned panels).
 PERM_ADMIN = 0x8
@@ -300,7 +300,7 @@ def render_section_panel(section_name: str, cfg: dict) -> str:
     Posted as its own message in the private mod channel, so the sections are
     split out there rather than crammed into a single panel."""
     emoji = SECTION_EMOJI.get(section_name, "•")
-    lines = [f"**{emoji} {section_name}** — react to show/hide:", ""]
+    lines = [f"**{emoji} {section_name}**: react to show/hide:", ""]
     for lbl in section_toggles(section_name):
         state = "✅ shown " if field_enabled(cfg, lbl) else "⬜ hidden"
         lines.append(f"{REACTION_EMOJI.get(lbl, '•')}  {state}  {lbl}")

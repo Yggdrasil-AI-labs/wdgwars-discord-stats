@@ -313,13 +313,13 @@ withheld:
 Note: several things earlier drafts listed as "not exposed" have since shipped and
 moved out of this table:
 
-- **Your own rank and recent captures** — `your_rank` and `recent_captures` on
+- **Your own rank and recent captures**: `your_rank` and `recent_captures` on
   `/api/me`, both shipped 2026-06-03.
-- **Per-device / per-hardware upload split** — the `devices` array on `/api/me`,
+- **Per-device / per-hardware upload split**: the `devices` array on `/api/me`,
   shipped 2026-07-17 (section 3). It is a per-rig *contribution* breakdown grouped
   by key `device_name`, not a re-slicing of your live account totals. (Per-**member**
   gang stats are separately available via `/api/team/me`, section 3.)
-- **Uncapped footprint** — `/api/me/cells` gives the server-aggregated per-cell AP
+- **Uncapped footprint**: `/api/me/cells` gives the server-aggregated per-cell AP
   counts the raw `/api/me/aps` list truncates away.
 
 ---

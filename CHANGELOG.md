@@ -12,14 +12,14 @@ diffing it.
 
 ### Added
 
-- **`war_feed.py`** — a diff-and-post alerter with three detectors:
-  - **⚔ Captures** — new entries in `recent_captures` on `/api/me`, announced
+- **`war_feed.py`**: a diff-and-post alerter with three detectors:
+  - **⚔ Captures**: new entries in `recent_captures` on `/api/me`, announced
     once each (deduped by a per-capture fingerprint, since the feed has no id).
-  - **🛡 Territory losses** — cells that lost APs or vanished, derived by diffing
+  - **🛡 Territory losses**: cells that lost APs or vanished, derived by diffing
     `/api/me/cells` between runs. WDGoWars exposes no defender-side loss feed, so
     this is the only way to see you are being pushed back; drops are aggregated
     into one message.
-  - **📴 Rig down / ✅ recovered** — a device whose `last_upload` crossed the
+  - **📴 Rig down / ✅ recovered**: a device whose `last_upload` crossed the
     staleness threshold (`WARFEED_RIG_STALE_HOURS`, default 12), and its recovery
     when it uploads again. Alerts once per state change, not every tick.
 - Posts through either a **webhook** (`DISCORD_WEBHOOK_URL`) or an existing
@@ -42,7 +42,7 @@ LXC and wrote up everything he hit. Thanks!
 ### Fixed
 
 - **Pinning the section panels needs Manage Messages**, which the invite didn't
-  request — so a bot invited exactly per the docs 403'd on the `pins` call (a
+  request, so a bot invited exactly per the docs 403'd on the `pins` call (a
   second, distinct permission from the Manage Roles one for private channels).
   The invite now requests Manage Channels + Manage Roles + **Manage Messages**
   (`permissions=268443664`), pinning degrades gracefully (the panel still works
@@ -134,7 +134,7 @@ section.
 ### Added
 
 - **Sectioned voice-channel display** (`live_stats_channels.py`): the flat
-  category is replaced by four category "sections" — 📊 Account, 🖥 Devices,
+  category is replaced by four category "sections", 📊 Account, 🖥 Devices,
   🌐 Territory, ⚙ Status. The **Devices** section renders one voice channel per
   rig from the `/api/me` `devices` array (e.g. `🖥 Cardputer: 61 234 nets`) and is
   toggled as a whole from the config panel (or `STATS_FIELDS_OFF=Devices`).
@@ -144,7 +144,7 @@ section.
 - **Sectioned webhook embed** (`discord_stats_webhook.py`): the embed is grouped
   under 📊 Account / 🌐 Territory / 🖥 Devices header dividers. The poster now also
   makes a best-effort `/api/me/cells` call to show a Footprint line (skipped
-  silently if the endpoint is unavailable — never fails the post).
+  silently if the endpoint is unavailable, never fails the post).
 
 ### Changed
 

@@ -32,7 +32,7 @@ Part of the WDGWars feeder and tooling family:
    sidebar dashboard look. Needs a Discord bot. You pick which fields to show.
 2. **Webhook post** (`discord_stats_webhook.py`): posts a stats embed to a
    channel via an incoming webhook. No bot, just a webhook URL. Simplest.
-3. **War feed** (`war_feed.py`): posts a message *when something happens* —
+3. **War feed** (`war_feed.py`): posts a message *when something happens*,
    you captured APs, you lost territory, or a rig stopped uploading. It
    remembers state between runs and diffs it. Webhook or bot, your choice.
 4. A [consolidated WDGWars API reference](docs/api-reference.md) so you can
@@ -48,11 +48,11 @@ The sidebar dashboard. A bot renames voice channels in one "live stats" category
 so their names read `📊 Total: 273 239`, `📶 WiFi: 67 201`, and so on. What's
 shown, grouped into sections:
 
-- **📊 Account** — User, Team, Total, WiFi, BLE, ADS-B, Mesh, Reinforced, Rank
-- **🖥 Devices** — one channel per rig (from the `/api/me` `devices` array), so
+- **📊 Account**: User, Team, Total, WiFi, BLE, ADS-B, Mesh, Reinforced, Rank
+- **🖥 Devices**: one channel per rig (from the `/api/me` `devices` array), so
   you can see how much each Cardputer / Pi / phone contributed
-- **🌐 Territory** — Footprint (total APs owned), gang size, gang APs
-- **⚙ Status** — Updated, Today, Week, Credits, Quota, API health
+- **🌐 Territory**: Footprint (total APs owned), gang size, gang APs
+- **⚙ Status**: Updated, Today, Week, Credits, Quota, API health
 
 The **control panel** (in the private `#stats-config` channel) is split into one
 pinned message per section, each carrying just that section's toggle reactions, so
@@ -77,7 +77,7 @@ Only a human can do this part; everything after is one command.
    Pick your server and authorize. Only **Manage Channels** is strictly required
    (it creates the stat channels). **Manage Roles** lets setup make `#stats-config`
    **private**; **Manage Messages** lets it **pin** the section panels. Without
-   those two, setup still completes — the config channel is just public and the
+   those two, setup still completes. The config channel is just public and the
    panels are unpinned (or set `STATS_CONFIG_PRIVATE=off` to skip privacy). If you
    see a `403 / Missing Permissions` on a `pins` call, that's Manage Messages
    missing; on a channel-create it's Manage Roles. `--check` prints the right
@@ -219,13 +219,13 @@ message **when something changes**, so a channel becomes a live feed of what is
 happening to your account rather than a static scoreboard. It fetches your data
 each tick, compares it to the last tick (kept in a small state file), and posts:
 
-- **⚔ Captures** — you took APs from someone, from `recent_captures` on
+- **⚔ Captures**: you took APs from someone, from `recent_captures` on
   `/api/me`.
-- **🛡 Territory losses** — cells you owned lost APs or vanished. WDGWars has
+- **🛡 Territory losses**: cells you owned lost APs or vanished. WDGWars has
   no defender-side loss feed, so this is derived locally by diffing
   `/api/me/cells` between runs. It is the only way to see you are being pushed
   back.
-- **📴 Rig down / ✅ recovered** — a device stopped uploading past a threshold
+- **📴 Rig down / ✅ recovered**: a device stopped uploading past a threshold
   (default 12 h), or came back, from the per-rig `last_upload` in the `devices`
   array.
 

@@ -98,7 +98,7 @@ class DeviceFieldsTests(unittest.TestCase):
     def test_unnamed_and_empty_row(self):
         fields = w.device_fields({"devices": [{}]}, limit=25)
         self.assertEqual(fields[0]["name"], "🖥 unnamed")
-        self.assertEqual(fields[0]["value"], "—")
+        self.assertEqual(fields[0]["value"], ", ")
 
     def test_build_embed_adds_devices_section_and_footer(self):
         embed = w.build_embed(w.SAMPLE_ME)["embeds"][0]

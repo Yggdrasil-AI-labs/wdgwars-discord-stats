@@ -110,7 +110,7 @@ def fetch_me(key: str, url: str = ME_URL) -> dict:
 
 def fetch_footprint(key: str, url: str = CELLS_URL):
     """Best-effort total APs owned, from GET /api/me/cells (sum of per-cell
-    counts, server-aggregated and uncapped). Returns None on any failure —
+    counts, server-aggregated and uncapped). Returns None on any failure,
     footprint is a nice-to-have, never a reason to fail the post. Never echoes
     the key.
     """
@@ -170,7 +170,7 @@ def device_fields(me: dict, limit: int) -> list:
         last = _fmt_last_upload(d.get("last_upload"))
         if last:
             parts.append(f"last {last}")
-        out.append({"name": f"🖥 {name}", "value": " · ".join(parts) or "—",
+        out.append({"name": f"🖥 {name}", "value": " · ".join(parts) or ", ",
                     "inline": True})
     return out
 
