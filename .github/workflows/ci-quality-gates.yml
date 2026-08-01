@@ -51,7 +51,7 @@ jobs:
       - name: Run pytest with coverage
         run: pytest --cov=live_stats_channels --cov=discord_stats_webhook --cov-report=xml --cov-report=term-missing --cov-branch
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-xml
           path: coverage.xml
@@ -74,7 +74,7 @@ jobs:
           cp -r docs dist/docs
           tar -czf wdgwars-discord-stats-bundle.tar.gz -C dist .
       - name: Upload release bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wdgwars-discord-stats-bundle
           path: wdgwars-discord-stats-bundle.tar.gz
