@@ -72,6 +72,47 @@ except Exception:
     TZ = timezone.utc
 
 
+def use_utf8_stdio() -> None:
+    """Ask stdout/stderr to speak UTF-8 so the emoji in channel names survive.
+
+    A Windows console (and any redirected pipe) defaults to cp1252, which cannot
+    encode the emoji this tool prints. Called from main(); emit() below is the
+    net for the cases where this cannot be applied."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError, LookupError):
+            try:
+                reconfigure(errors="replace")
+            except (ValueError, OSError):
+                pass
+
+
+def emit(*args, sep: str = " ", end: str = "\n", file=None, flush: bool = False) -> None:
+    """print() that degrades instead of raising on an unencodable character.
+
+    Channel and category names carry emoji. On a cp1252 console a plain print of
+    one raises UnicodeEncodeError, which during --setup aborts the run after
+    channels have already been created on the server, leaving it half built. Use
+    this everywhere in place of print()."""
+    stream = sys.stdout if file is None else file
+    text = sep.join(str(a) for a in args) + end
+    try:
+        stream.write(text)
+    except UnicodeEncodeError:
+        enc = getattr(stream, "encoding", None) or "ascii"
+        try:
+            text = text.encode(enc, "replace").decode(enc, "replace")
+        except LookupError:
+            text = text.encode("ascii", "replace").decode("ascii")
+        stream.write(text)
+    if flush:
+        stream.flush()
+
+
 def _load_dotenv() -> None:
     """Populate the environment from a .env file so users can fill in a text
     file instead of running `export` commands. Does not override variables that
@@ -650,13 +691,13 @@ def setup_discord(install_runner: bool = True) -> int:
     existing_cats = {c["name"]: c for c in chs if c["type"] == 4}
     cat = existing_cats.get(CATEGORY_NAME)
     if cat:
-        print(f"category exists: {CATEGORY_NAME} ({cat['id']})")
+        emit(f"category exists: {CATEGORY_NAME} ({cat['id']})")
     else:
         cat = discord_api("POST", f"/guilds/{GUILD_ID}/channels",
                           {"name": CATEGORY_NAME, "type": 4})
         if not cat:
             raise SystemExit("failed to create the live-stats category")
-        print(f"created category: {CATEGORY_NAME} ({cat['id']})")
+        emit(f"created category: {CATEGORY_NAME} ({cat['id']})")
     parent_id = cat["id"]
 
     cfg_name = os.environ.get("STATS_CONFIG_CHANNEL_NAME", "stats-config")
@@ -667,15 +708,15 @@ def setup_discord(install_runner: bool = True) -> int:
         "by hand and give the bot access.")
     modch = next((c for c in chs if c["type"] == 0 and c["name"] == cfg_name), None)
     if modch:
-        print(f"mod-config channel exists: #{cfg_name} ({modch['id']})")
+        emit(f"mod-config channel exists: #{cfg_name} ({modch['id']})")
         if ow is not None:
             if discord_api("PATCH", f"/channels/{modch['id']}",
                            {"permission_overwrites": ow}) is not None:
-                print("  set private (hidden from regular members)")
+                emit("  set private (hidden from regular members)")
             else:
-                print("  could NOT set it private: the bot needs 'Manage Roles' to "
+                emit("  could NOT set it private: the bot needs 'Manage Roles' to "
                       "change channel privacy. Left as-is.")
-                print(priv_note)
+                emit(priv_note)
     else:
         base = {
             "name": cfg_name, "type": 0, "parent_id": parent_id,
@@ -685,22 +726,22 @@ def setup_discord(install_runner: bool = True) -> int:
         if ow is None:
             modch = discord_api("POST", f"/guilds/{GUILD_ID}/channels", base)
             if modch:
-                print(f"created mod-config channel: #{cfg_name} ({modch['id']}) [visible to all]")
+                emit(f"created mod-config channel: #{cfg_name} ({modch['id']}) [visible to all]")
         else:
             modch = discord_api("POST", f"/guilds/{GUILD_ID}/channels",
                                 dict(base, permission_overwrites=ow))
             if modch:
-                print(f"created mod-config channel: #{cfg_name} ({modch['id']}) [hidden from members]")
+                emit(f"created mod-config channel: #{cfg_name} ({modch['id']}) [hidden from members]")
             else:
                 # Creating a channel WITH overwrites needs Manage Roles; the bot
                 # may only have Manage Channels. Fall back to a public channel so
                 # setup still completes, and say how to lock it down.
-                print("  couldn't create it private (the bot needs 'Manage Roles' to "
+                emit("  couldn't create it private (the bot needs 'Manage Roles' to "
                       "set channel privacy). Creating it public instead.")
                 modch = discord_api("POST", f"/guilds/{GUILD_ID}/channels", base)
                 if modch:
-                    print(f"created mod-config channel: #{cfg_name} ({modch['id']}) [PUBLIC]")
-                    print(priv_note)
+                    emit(f"created mod-config channel: #{cfg_name} ({modch['id']}) [PUBLIC]")
+                    emit(priv_note)
         if not modch:
             raise SystemExit("failed to create the mod-config channel")
 
@@ -723,29 +764,29 @@ def setup_discord(install_runner: bool = True) -> int:
                 msgs[name] = m["id"]
                 add_panel_reactions(modch["id"], m["id"], section_toggles(name))
     save_json(CONFIG_PATH, cfg)
-    print(f"posted {len(msgs)} section panels to #{cfg_name}")
+    emit(f"posted {len(msgs)} section panels to #{cfg_name}")
 
     if WDGO_KEY:
-        print("populating stat channels...")
+        emit("populating stat channels...")
         tick(load_json(STATE_PATH, {"tick": 0}), sample=False)
-        print("done.")
+        emit("done.")
     else:
-        print("set WDGWARS_API_KEY and run `--once` to populate the stat channels.")
+        emit("set WDGWARS_API_KEY and run `--once` to populate the stat channels.")
 
-    print()
-    print(f"Setup complete. Config written to {CONFIG_PATH}.")
+    emit()
+    emit(f"Setup complete. Config written to {CONFIG_PATH}.")
     if install_runner:
-        print()
-        print("Installing the auto-updater so the display keeps refreshing...")
+        emit()
+        emit("Installing the auto-updater so the display keeps refreshing...")
         install_schedule()  # so setup never leaves a display that populates once then freezes
     else:
-        print("Auto-updater NOT installed (--no-schedule). The channels are populated")
-        print("but will freeze until something updates them. Keep them fresh with:")
-        print("  python live_stats_channels.py --schedule   # install it later")
-        print("  python live_stats_channels.py              # or run the loop yourself")
-        print("  or the GitHub Actions workflow (see the README)")
-    print()
-    print(f"Change which fields show by reacting on the panel in #{cfg_name}, "
+        emit("Auto-updater NOT installed (--no-schedule). The channels are populated")
+        emit("but will freeze until something updates them. Keep them fresh with:")
+        emit("  python live_stats_channels.py --schedule   # install it later")
+        emit("  python live_stats_channels.py              # or run the loop yourself")
+        emit("  or the GitHub Actions workflow (see the README)")
+    emit()
+    emit(f"Change which fields show by reacting on the panel in #{cfg_name}, "
           "or edit the config file.")
     return 0
 
@@ -836,20 +877,20 @@ def tick(state: dict, sample: bool = False) -> None:
 def dry_run(sample: bool) -> int:
     cfg = load_config()
     stats, devices, _ = gather_stats(sample=sample)
-    print(f"category: {CATEGORY_NAME!r}  (all channels; panel is split by section)")
-    print("channels (✅ shown, ⬜ hidden by config), grouped by panel section:")
+    emit(f"category: {CATEGORY_NAME!r}  (all channels; panel is split by section)")
+    emit("channels (✅ shown, ⬜ hidden by config), grouped by panel section:")
     for name, emoji, fields in SECTIONS:
-        print(f"\n  {emoji} {name}")
+        emit(f"\n  {emoji} {name}")
         if fields is None:
             mark = "✅" if field_enabled(cfg, DEVICES_TOGGLE) else "⬜"
             if not devices:
-                print(f"    {mark} 🖥 (no rigs reported)")
+                emit(f"    {mark} 🖥 (no rigs reported)")
             for val in devices.values():
-                print(f"    {mark} {val}")
+                emit(f"    {mark} {val}")
         else:
             for lbl in fields:
                 mark = "✅" if field_enabled(cfg, lbl) else "⬜"
-                print(f"    {mark} {stats.get(lbl, '(missing)')}")
+                emit(f"    {mark} {stats.get(lbl, '(missing)')}")
     return 0
 
 
@@ -925,7 +966,7 @@ def preflight():
 
 def print_checks(checks) -> None:
     for ok, msg in checks:
-        print(f"  {'✓' if ok else '✗'} {msg}")
+        emit(f"  {'✓' if ok else '✗'} {msg}")
 
 
 class EnvFileSymlinkError(OSError):
@@ -980,30 +1021,30 @@ def run_wizard() -> bool:
     if not sys.stdin.isatty():
         return False
     import getpass
-    print("No configuration found. Let's set it up (saved to a local .env file).\n"
+    emit("No configuration found. Let's set it up (saved to a local .env file).\n"
           "Get your API key from wdgwars.pl/profile, and your bot token + server id\n"
           "from the Discord Developer Portal (see the README if you have not made a bot).\n")
     key = getpass.getpass("WDGWars API key (hidden): ").strip()
     token = getpass.getpass("Discord bot token (hidden): ").strip()
     guild = input("Discord server (guild) id: ").strip()
     if not (key and token and guild):
-        print("Setup cancelled (all three values are required).")
+        emit("Setup cancelled (all three values are required).")
         return False
     env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
     if os.path.exists(env_path):
         if input(f"{env_path} already exists. Overwrite? [y/N] ").strip().lower() != "y":
-            print("Kept existing .env; using its values.")
+            emit("Kept existing .env; using its values.")
             return False
     content = (f"WDGWARS_API_KEY={key}\nDISCORD_BOT_TOKEN={token}\n"
                f"DISCORD_GUILD_ID={guild}\n")
     try:
         _write_env_file(env_path, content)
     except EnvFileSymlinkError as e:
-        print(f"Setup aborted: {e}\n"
+        emit(f"Setup aborted: {e}\n"
               "Remove that symlink (or point it somewhere you trust) and re-run setup.")
         sys.exit(1)
     except OSError as e:
-        print(f"Setup aborted: could not create or secure {env_path}: {e}\n"
+        emit(f"Setup aborted: could not create or secure {env_path}: {e}\n"
               "The file may not exist, or may exist with unsafe permissions. "
               "Fix this manually and re-run setup.")
         sys.exit(1)
@@ -1012,11 +1053,11 @@ def run_wizard() -> bool:
     os.environ.update({"DISCORD_BOT_TOKEN": token, "WDGWARS_API_KEY": key,
                        "DISCORD_GUILD_ID": guild})
     if os.name == "nt":
-        print(f"Saved to {env_path}.\n"
+        emit(f"Saved to {env_path}.\n"
               "Note: on Windows this relies on NTFS ACLs (your user profile "
               "directory), not the chmod 600 guarantee POSIX gets.\n")
     else:
-        print(f"Saved to {env_path} (readable only by you).\n")
+        emit(f"Saved to {env_path} (readable only by you).\n")
     return True
 
 
@@ -1061,13 +1102,13 @@ def _install_windows(script: str) -> int:
            "/SC", "MINUTE", "/MO", str(mins), "/F"]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
-        print("Could not create the scheduled task:")
-        print("  " + scrub((r.stderr or r.stdout).strip()))
+        emit("Could not create the scheduled task:")
+        emit("  " + scrub((r.stderr or r.stdout).strip()))
         return 1
-    print(f"Scheduled task '{TASK_NAME}' created: runs every {mins} min, "
+    emit(f"Scheduled task '{TASK_NAME}' created: runs every {mins} min, "
           "windowless (no popup), quiet.")
-    print("It runs while you are logged in. Remove it with:")
-    print("  python live_stats_channels.py --unschedule")
+    emit("It runs while you are logged in. Remove it with:")
+    emit("  python live_stats_channels.py --unschedule")
     return 0
 
 
@@ -1105,14 +1146,14 @@ def _install_systemd(script: str) -> int:
     r = subprocess.run(["systemctl", "--user", "enable", "--now", SERVICE_NAME],
                        capture_output=True, text=True)
     if r.returncode != 0:
-        print("Wrote the unit but could not enable it:")
-        print("  " + scrub(r.stderr.strip()))
-        print(f"Finish manually:  systemctl --user enable --now {SERVICE_NAME}")
+        emit("Wrote the unit but could not enable it:")
+        emit("  " + scrub(r.stderr.strip()))
+        emit(f"Finish manually:  systemctl --user enable --now {SERVICE_NAME}")
         return 1
-    print(f"Installed and started systemd user service '{SERVICE_NAME}'.")
-    print("Runs continuously, restarts on failure, starts at boot (lingering on).")
-    print(f"Follow logs:  journalctl --user -u {SERVICE_NAME} -f")
-    print("Remove it with:  python live_stats_channels.py --unschedule")
+    emit(f"Installed and started systemd user service '{SERVICE_NAME}'.")
+    emit("Runs continuously, restarts on failure, starts at boot (lingering on).")
+    emit(f"Follow logs:  journalctl --user -u {SERVICE_NAME} -f")
+    emit("Remove it with:  python live_stats_channels.py --unschedule")
     return 0
 
 
@@ -1120,9 +1161,9 @@ def _install_cron(script: str) -> int:
     mins = _interval_minutes()
     line = (f"*/{mins} * * * * cd {os.path.dirname(script)} && "
             f"{sys.executable} {script} --once --quiet")
-    print("No systemd here. Add this line with `crontab -e` (review it first):\n")
-    print("  " + line)
-    print(f"\nThat runs one quiet update every {mins} min.")
+    emit("No systemd here. Add this line with `crontab -e` (review it first):\n")
+    emit("  " + line)
+    emit(f"\nThat runs one quiet update every {mins} min.")
     return 0
 
 
@@ -1131,7 +1172,7 @@ def remove_schedule() -> int:
     if os.name == "nt":
         r = subprocess.run(["schtasks", "/Delete", "/TN", TASK_NAME, "/F"],
                            capture_output=True, text=True)
-        print(f"Removed scheduled task '{TASK_NAME}'." if r.returncode == 0
+        emit(f"Removed scheduled task '{TASK_NAME}'." if r.returncode == 0
               else f"No task '{TASK_NAME}' to remove (or delete failed).")
         return 0
     if shutil.which("systemctl"):
@@ -1143,9 +1184,9 @@ def remove_schedule() -> int:
             pass
         subprocess.run(["systemctl", "--user", "daemon-reload"],
                        capture_output=True, text=True)
-        print(f"Disabled and removed systemd user service '{SERVICE_NAME}'.")
+        emit(f"Disabled and removed systemd user service '{SERVICE_NAME}'.")
         return 0
-    print("Nothing auto-installed to remove (cron entries are manual: crontab -e).")
+    emit("Nothing auto-installed to remove (cron entries are manual: crontab -e).")
     return 0
 
 
@@ -1177,11 +1218,7 @@ def main() -> int:
 
     # Field labels contain emoji; make sure stdout can render them even on a
     # non-UTF-8 console (e.g. Windows cp1252).
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8")
-        except Exception:
-            pass
+    use_utf8_stdio()
 
     level = "WARNING" if args.quiet else os.environ.get("STATS_LOG_LEVEL", "INFO")
     logging.basicConfig(
@@ -1204,7 +1241,7 @@ def main() -> int:
         run_wizard()
 
     if args.check:
-        print("Config check:")
+        emit("Config check:")
         checks, can_write, key_ok = preflight()
         print_checks(checks)
         return 0 if (can_write and key_ok) else 1
@@ -1230,7 +1267,7 @@ def main() -> int:
         print_checks(checks)
         if not can_write or key_ok is False:
             raise SystemExit("fix the config issues above, then --schedule again")
-        print("Tip: run --setup once first so the channels exist.\n")
+        emit("Tip: run --setup once first so the channels exist.\n")
         return install_schedule()
 
     state = load_json(STATE_PATH, {"tick": 0})

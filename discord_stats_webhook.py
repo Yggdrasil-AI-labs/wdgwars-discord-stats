@@ -44,6 +44,50 @@ import urllib.error
 import urllib.request
 
 
+def use_utf8_stdio() -> None:
+    """Ask stdout/stderr to speak UTF-8 so emoji in the output survive.
+
+    A Windows console (and any redirected pipe) defaults to cp1252, which cannot
+    encode the emoji in the embed field labels. Called from main(); emit() below
+    is the net for the cases where this cannot be applied.
+
+    Kept in sync with the identical helpers in war_feed.py and
+    live_stats_channels.py (these are standalone scripts, none imports the
+    others, so this is a deliberate copy, not a fork)."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError, LookupError):
+            try:
+                reconfigure(errors="replace")
+            except (ValueError, OSError):
+                pass
+
+
+def emit(*args, sep: str = " ", end: str = "\n", file=None, flush: bool = False) -> None:
+    """print() that degrades instead of raising on an unencodable character.
+
+    On a cp1252 console, printing text that carries emoji raises
+    UnicodeEncodeError and aborts the run partway through. Use this everywhere
+    in place of print()."""
+    stream = sys.stdout if file is None else file
+    text = sep.join(str(a) for a in args) + end
+    try:
+        stream.write(text)
+    except UnicodeEncodeError:
+        enc = getattr(stream, "encoding", None) or "ascii"
+        try:
+            text = text.encode(enc, "replace").decode(enc, "replace")
+        except LookupError:
+            text = text.encode("ascii", "replace").decode("ascii")
+        stream.write(text)
+    if flush:
+        stream.flush()
+
+
 def _load_dotenv() -> None:
     """Populate the environment from a .env file next to this script (or
     $STATS_ENV_FILE), so users can fill in a text file instead of exporting.
@@ -305,6 +349,10 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    # Embed field labels carry emoji; make sure stdout can render them even on a
+    # non-UTF-8 console (e.g. Windows cp1252).
+    use_utf8_stdio()
+
     if args.sample:
         me = SAMPLE_ME
         footprint = SAMPLE_FOOTPRINT
@@ -321,14 +369,14 @@ def main() -> int:
     payload = build_embed(me, footprint)
 
     if args.dry_run:
-        print(json.dumps(payload, indent=2))
+        emit(json.dumps(payload, indent=2))
         return 0
 
     if not args.webhook:
         raise SystemExit("set DISCORD_WEBHOOK_URL or pass --webhook (or use --dry-run)")
 
     post_to_discord(args.webhook, payload)
-    print("posted to Discord")
+    emit("posted to Discord")
     return 0
 
 

@@ -476,5 +476,52 @@ class WriteEnvFileTests(unittest.TestCase):
                     m._write_env_file(str(p), "WDGWARS_API_KEY=x\n")
 
 
+class ConsoleEncodingTests(unittest.TestCase):
+    """The category and channel names carry emoji. A cp1252 console cannot
+    encode them, and a plain print used to raise UnicodeEncodeError partway
+    through --setup, after channels had already been created on the server."""
+
+    @staticmethod
+    def _cp1252_stream():
+        import io
+        return io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+
+    def test_emit_degrades_instead_of_raising(self):
+        import unittest.mock as mock
+        stream = self._cp1252_stream()
+        with mock.patch.object(sys, "stdout", stream):
+            m.emit(f"created category: {m.CATEGORY_NAME}")
+        stream.flush()
+        written = stream.buffer.getvalue().decode("cp1252")
+        self.assertTrue(written.startswith("created category: "))
+        self.assertIn("?", written)
+        self.assertTrue(written.endswith("\n"))
+
+    def test_emit_keeps_unicode_when_the_stream_can_take_it(self):
+        import io
+        import unittest.mock as mock
+        stream = io.StringIO()
+        with mock.patch.object(sys, "stdout", stream):
+            m.emit("category: 📊 │ live stats")
+        self.assertEqual(stream.getvalue(), "category: 📊 │ live stats\n")
+
+    def test_use_utf8_stdio_switches_a_cp1252_stream(self):
+        import unittest.mock as mock
+        out, err = self._cp1252_stream(), self._cp1252_stream()
+        with mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", err):
+            m.use_utf8_stdio()
+            self.assertEqual(out.encoding.lower().replace("-", ""), "utf8")
+            self.assertEqual(err.errors, "replace")
+            out.write("📊")
+        out.flush()
+        self.assertEqual(out.buffer.getvalue().decode("utf-8"), "📊")
+
+    def test_use_utf8_stdio_tolerates_a_stream_without_reconfigure(self):
+        import io
+        import unittest.mock as mock
+        with mock.patch.object(sys, "stdout", io.StringIO()):
+            m.use_utf8_stdio()  # must not raise
+
+
 if __name__ == "__main__":
     unittest.main()

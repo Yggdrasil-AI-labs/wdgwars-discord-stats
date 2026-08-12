@@ -67,6 +67,50 @@ except Exception:
     TZ = timezone.utc
 
 
+def use_utf8_stdio() -> None:
+    """Ask stdout/stderr to speak UTF-8 so emoji in the output survive.
+
+    A Windows console (and any redirected pipe) defaults to cp1252, which cannot
+    encode the emoji that show up in alert text and network names. Called from
+    main(); emit() below is the net for the cases where this cannot be applied.
+
+    Kept in sync with the identical helpers in live_stats_channels.py and
+    discord_stats_webhook.py (these are standalone scripts, none imports the
+    others, so this is a deliberate copy, not a fork)."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError, LookupError):
+            try:
+                reconfigure(errors="replace")
+            except (ValueError, OSError):
+                pass
+
+
+def emit(*args, sep: str = " ", end: str = "\n", file=None, flush: bool = False) -> None:
+    """print() that degrades instead of raising on an unencodable character.
+
+    On a cp1252 console, printing text that carries emoji raises
+    UnicodeEncodeError and aborts the run partway through. Use this everywhere
+    in place of print()."""
+    stream = sys.stdout if file is None else file
+    text = sep.join(str(a) for a in args) + end
+    try:
+        stream.write(text)
+    except UnicodeEncodeError:
+        enc = getattr(stream, "encoding", None) or "ascii"
+        try:
+            text = text.encode(enc, "replace").decode(enc, "replace")
+        except LookupError:
+            text = text.encode("ascii", "replace").decode("ascii")
+        stream.write(text)
+    if flush:
+        stream.flush()
+
+
 def _load_dotenv() -> None:
     """Populate the environment from a .env file next to this script (or
     $STATS_ENV_FILE), so users can fill in a text file instead of exporting.
@@ -524,7 +568,7 @@ def tick(sample: bool, dry_run: bool = False, seed: bool = False) -> int:
         return 0
 
     if dry_run:
-        print(json.dumps({"events": len(embeds), "embeds": embeds}, indent=2))
+        emit(json.dumps({"events": len(embeds), "embeds": embeds}, indent=2))
         return len(embeds)
 
     if embeds:
@@ -574,12 +618,12 @@ def _install_windows(script: str) -> int:
            "/SC", "MINUTE", "/MO", str(mins), "/F"]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
-        print("Could not create the scheduled task:")
-        print("  " + scrub((r.stderr or r.stdout).strip()))
+        emit("Could not create the scheduled task:")
+        emit("  " + scrub((r.stderr or r.stdout).strip()))
         return 1
-    print(f"Scheduled task '{TASK_NAME}' created: runs every {mins} min, "
+    emit(f"Scheduled task '{TASK_NAME}' created: runs every {mins} min, "
           "windowless, quiet.")
-    print("Remove it with:  python war_feed.py --unschedule")
+    emit("Remove it with:  python war_feed.py --unschedule")
     return 0
 
 
@@ -615,13 +659,13 @@ def _install_systemd(script: str) -> int:
     r = subprocess.run(["systemctl", "--user", "enable", "--now", SERVICE_NAME],
                        capture_output=True, text=True)
     if r.returncode != 0:
-        print("Wrote the unit but could not enable it:")
-        print("  " + scrub(r.stderr.strip()))
-        print(f"Finish manually:  systemctl --user enable --now {SERVICE_NAME}")
+        emit("Wrote the unit but could not enable it:")
+        emit("  " + scrub(r.stderr.strip()))
+        emit(f"Finish manually:  systemctl --user enable --now {SERVICE_NAME}")
         return 1
-    print(f"Installed and started systemd user service '{SERVICE_NAME}'.")
-    print(f"Follow logs:  journalctl --user -u {SERVICE_NAME} -f")
-    print("Remove it with:  python war_feed.py --unschedule")
+    emit(f"Installed and started systemd user service '{SERVICE_NAME}'.")
+    emit(f"Follow logs:  journalctl --user -u {SERVICE_NAME} -f")
+    emit("Remove it with:  python war_feed.py --unschedule")
     return 0
 
 
@@ -629,8 +673,8 @@ def _install_cron(script: str) -> int:
     mins = _interval_minutes()
     line = (f"*/{mins} * * * * cd {os.path.dirname(script)} && "
             f"{sys.executable} {script} --once --quiet")
-    print("No systemd here. Add this line with `crontab -e` (review it first):\n")
-    print("  " + line)
+    emit("No systemd here. Add this line with `crontab -e` (review it first):\n")
+    emit("  " + line)
     return 0
 
 
@@ -638,7 +682,7 @@ def remove_schedule() -> int:
     if os.name == "nt":
         r = subprocess.run(["schtasks", "/Delete", "/TN", TASK_NAME, "/F"],
                            capture_output=True, text=True)
-        print(f"Removed scheduled task '{TASK_NAME}'." if r.returncode == 0
+        emit(f"Removed scheduled task '{TASK_NAME}'." if r.returncode == 0
               else f"No task '{TASK_NAME}' to remove (or delete failed).")
         return 0
     if shutil.which("systemctl"):
@@ -650,9 +694,9 @@ def remove_schedule() -> int:
             pass
         subprocess.run(["systemctl", "--user", "daemon-reload"],
                        capture_output=True, text=True)
-        print(f"Disabled and removed systemd user service '{SERVICE_NAME}'.")
+        emit(f"Disabled and removed systemd user service '{SERVICE_NAME}'.")
         return 0
-    print("Nothing auto-installed to remove (cron entries are manual: crontab -e).")
+    emit("Nothing auto-installed to remove (cron entries are manual: crontab -e).")
     return 0
 
 
@@ -677,11 +721,9 @@ def main() -> int:
                         help="log warnings and errors only")
     args = parser.parse_args()
 
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8")
-        except Exception:
-            pass
+    # Alert text carries emoji; make sure stdout can render them even on a
+    # non-UTF-8 console (e.g. Windows cp1252).
+    use_utf8_stdio()
 
     level = "WARNING" if args.quiet else os.environ.get("WARFEED_LOG_LEVEL", "INFO")
     logging.basicConfig(

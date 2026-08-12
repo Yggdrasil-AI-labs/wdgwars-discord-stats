@@ -4,6 +4,22 @@ All notable changes to wdgwars-discord-stats are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.5.2] - 2026-08-12 - Setup no longer dies on a cp1252 console
+
+### Fixed
+
+- **`--setup` no longer aborts partway through with a `UnicodeEncodeError` on a
+  Windows console.** The default console code page is cp1252, which cannot
+  encode the emoji in the category name (U+1F4CA), so printing the
+  "created category" line raised and killed the run **after** the category had
+  already been created on the server, leaving the server half set up. The same
+  exposure applied to `--status` and `--check`, whose output carries emoji and
+  check marks. All three scripts now print through an `emit()` helper that
+  replaces unencodable characters instead of raising, and `use_utf8_stdio()`
+  switches stdout/stderr to UTF-8 with `errors="replace"` at startup so the
+  emoji still render as themselves wherever the stream allows it. The category
+  name is unchanged, so nobody's Discord category gets renamed.
+
 ## [1.5.1] - 2026-08-12 - Setup wizard: hardened .env write
 
 Found in an audit against a key-handling standard being published for community
