@@ -430,5 +430,51 @@ class ReconcileChannelsTests(unittest.TestCase):
         self.assertNotIn("/channels/x", deleted)   # manual channel left alone
 
 
+class WriteEnvFileTests(unittest.TestCase):
+    """_write_env_file backs the setup wizard's .env write (run_wizard, around
+    live_stats_channels.py:947). Lock in the hardening mirrored from
+    gungnir/gungnir/keys.py save_key(): refuse a symlink, create at 0600
+    atomically, and never swallow a chmod failure."""
+
+    def test_refuses_to_write_through_symlink(self):
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as d, \
+                tempfile.TemporaryDirectory() as other:
+            target = Path(other).resolve() / "real.env"
+            link = Path(d).resolve() / ".env"
+            try:
+                os.symlink(target, link)
+            except (OSError, NotImplementedError, AttributeError):
+                self.skipTest("symlink creation not permitted on this host")
+            with self.assertRaises(m.EnvFileSymlinkError):
+                m._write_env_file(str(link), "WDGWARS_API_KEY=x\n")
+            self.assertFalse(target.exists(),
+                              "secret was written through the symlink")
+
+    @unittest.skipIf(sys.platform == "win32",
+                      "POSIX file mode is not enforced by NTFS ACLs on Windows")
+    def test_mode_is_owner_only(self):
+        import stat
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / ".env"
+            m._write_env_file(str(p), "WDGWARS_API_KEY=x\n")
+            mode = stat.S_IMODE(p.stat().st_mode)
+            self.assertEqual(mode & 0o077, 0,
+                              f".env is group/other-accessible: {oct(mode)}")
+
+    @unittest.skipIf(sys.platform == "win32",
+                      "chmod is a no-op on Windows; nothing to fail")
+    def test_chmod_failure_is_not_swallowed(self):
+        import tempfile
+        import unittest.mock as mock
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / ".env"
+            with mock.patch("os.chmod", side_effect=OSError("nope")):
+                with self.assertRaises(OSError):
+                    m._write_env_file(str(p), "WDGWARS_API_KEY=x\n")
+
+
 if __name__ == "__main__":
     unittest.main()

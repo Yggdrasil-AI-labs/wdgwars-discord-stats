@@ -175,5 +175,44 @@ class FetchFootprintTests(unittest.TestCase):
             self.assertIsNone(w.fetch_footprint("k"))
 
 
+class LoadDotenvTests(unittest.TestCase):
+    """discord_stats_webhook.py must load .env like its siblings war_feed.py
+    and live_stats_channels.py, so that following .env.example's "copy to
+    .env" instructions works the same regardless of which of the three
+    scripts is run."""
+
+    def test_has_load_dotenv_helper(self):
+        self.assertTrue(hasattr(w, "_load_dotenv"),
+                         "discord_stats_webhook.py has no _load_dotenv helper")
+
+    def test_load_dotenv_populates_environment_from_file(self):
+        import os
+        import tempfile
+        import unittest.mock as mock
+        with tempfile.TemporaryDirectory() as d:
+            envfile = Path(d) / ".env"
+            envfile.write_text("WDGWARS_API_KEY=from-dotenv\n")
+            with mock.patch.dict(os.environ, {"STATS_ENV_FILE": str(envfile)},
+                                  clear=False):
+                os.environ.pop("WDGWARS_API_KEY", None)
+                w._load_dotenv()
+                self.assertEqual(os.environ.get("WDGWARS_API_KEY"), "from-dotenv")
+                del os.environ["WDGWARS_API_KEY"]
+
+    def test_real_environment_wins_over_dotenv(self):
+        import os
+        import tempfile
+        import unittest.mock as mock
+        with tempfile.TemporaryDirectory() as d:
+            envfile = Path(d) / ".env"
+            envfile.write_text("WDGWARS_API_KEY=from-dotenv\n")
+            with mock.patch.dict(
+                    os.environ,
+                    {"STATS_ENV_FILE": str(envfile), "WDGWARS_API_KEY": "real"},
+                    clear=False):
+                w._load_dotenv()
+                self.assertEqual(os.environ.get("WDGWARS_API_KEY"), "real")
+
+
 if __name__ == "__main__":
     unittest.main()

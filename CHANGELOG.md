@@ -4,6 +4,33 @@ All notable changes to wdgwars-discord-stats are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.5.1] - 2026-08-12 - Setup wizard: hardened .env write
+
+Found in an audit against a key-handling standard being published for community
+tools in this family (see gungnir/gungnir/keys.py's `save_key()` for the same
+pattern).
+
+### Fixed
+
+- **`live_stats_channels.py`'s setup wizard no longer briefly world-readable
+  writes `.env`.** It previously wrote the secrets first and `chmod 600`'d the
+  file afterward, leaving a window at default permissions, silently ignored a
+  failing `chmod`, and followed a pre-existing symlink at the `.env` path
+  instead of refusing it. It now refuses to write through a symlink (aborting
+  with a clear message), creates the file at mode 0600 atomically before any
+  secret byte is written, and surfaces a chmod failure instead of swallowing
+  it. On Windows, where `chmod` bits do not govern NTFS ACLs, the wizard says
+  so rather than implying a guarantee the platform doesn't give.
+- **`discord_stats_webhook.py` did not load `.env`**, while its two sibling
+  scripts do, so following `.env.example`'s "copy to `.env`" instructions and
+  running the webhook script produced a bare "set `WDGWARS_API_KEY`" error
+  with no hint why. It now loads `.env` the same way the other two scripts do.
+
+### Docs
+
+- SECURITY.md's `.env` permission claim now states the POSIX guarantee and the
+  Windows caveat precisely, instead of implying `chmod 600` everywhere.
+
 ## [1.5.0] - 2026-07-19 - War feed: event alerts, not just snapshots
 
 A third tool, `war_feed.py`. Where the other two show your current numbers, this

@@ -928,6 +928,51 @@ def print_checks(checks) -> None:
         print(f"  {'✓' if ok else '✗'} {msg}")
 
 
+class EnvFileSymlinkError(OSError):
+    """Raised by :func:`_write_env_file` if the target ``.env`` path is a
+    symlink. Surfaced to the user as a setup error rather than followed."""
+
+
+def _write_env_file(path: str, content: str) -> None:
+    """Write ``content`` to ``path`` as the wizard's ``.env`` secrets file.
+
+    Mirrors the hardened ``save_key()`` in gungnir/gungnir/keys.py (same
+    family of tools, same threat model):
+
+    - **Refuse to write through a symlink.** If ``path`` already exists as a
+      symlink, raise :class:`EnvFileSymlinkError` rather than follow it. A
+      symlink planted at this path ahead of time would otherwise redirect the
+      secret write to an arbitrary file.
+    - **Create at 0o600 atomically.** ``os.open`` with
+      ``O_WRONLY | O_CREAT | O_TRUNC`` and mode 0o600 *before* any secret byte
+      is written, so the file is never briefly world-readable between create
+      and a later chmod.
+    - **Do not swallow a chmod failure.** The wizard is interactive; if the
+      belt-and-suspenders chmod (needed when the file already existed with
+      looser permissions) fails, the caller is told rather than silently
+      shipping a less-protected file.
+
+    Windows note: NTFS ACLs, not POSIX mode bits, govern who can read the
+    file there, so ``os.chmod`` is skipped on Windows rather than making a
+    permissions claim the platform cannot back up.
+    """
+    if os.path.islink(path):
+        raise EnvFileSymlinkError(
+            f"refusing to write through symlink: {path} -> {os.readlink(path)}"
+        )
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, content.encode())
+    finally:
+        os.close(fd)
+    if os.name != "nt":
+        # Belt-and-suspenders: covers the case where the file already existed
+        # with looser permissions (O_CREAT's mode only applies on creation,
+        # not on truncation of an existing file). Not swallowed: a failure
+        # here means the file may be readable by other local accounts.
+        os.chmod(path, 0o600)
+
+
 def run_wizard() -> bool:
     """Interactively collect the three secrets, write .env, and update the live
     config. Only runs on a real terminal; returns False otherwise so cron/CI
@@ -949,18 +994,29 @@ def run_wizard() -> bool:
         if input(f"{env_path} already exists. Overwrite? [y/N] ").strip().lower() != "y":
             print("Kept existing .env; using its values.")
             return False
-    with open(env_path, "w") as f:
-        f.write(f"WDGWARS_API_KEY={key}\nDISCORD_BOT_TOKEN={token}\n"
-                f"DISCORD_GUILD_ID={guild}\n")
+    content = (f"WDGWARS_API_KEY={key}\nDISCORD_BOT_TOKEN={token}\n"
+               f"DISCORD_GUILD_ID={guild}\n")
     try:
-        os.chmod(env_path, 0o600)
-    except OSError:
-        pass
+        _write_env_file(env_path, content)
+    except EnvFileSymlinkError as e:
+        print(f"Setup aborted: {e}\n"
+              "Remove that symlink (or point it somewhere you trust) and re-run setup.")
+        sys.exit(1)
+    except OSError as e:
+        print(f"Setup aborted: could not create or secure {env_path}: {e}\n"
+              "The file may not exist, or may exist with unsafe permissions. "
+              "Fix this manually and re-run setup.")
+        sys.exit(1)
     global TOKEN, WDGO_KEY, GUILD_ID
     TOKEN, WDGO_KEY, GUILD_ID = token, key, guild
     os.environ.update({"DISCORD_BOT_TOKEN": token, "WDGWARS_API_KEY": key,
                        "DISCORD_GUILD_ID": guild})
-    print(f"Saved to {env_path} (readable only by you).\n")
+    if os.name == "nt":
+        print(f"Saved to {env_path}.\n"
+              "Note: on Windows this relies on NTFS ACLs (your user profile "
+              "directory), not the chmod 600 guarantee POSIX gets.\n")
+    else:
+        print(f"Saved to {env_path} (readable only by you).\n")
     return True
 
 

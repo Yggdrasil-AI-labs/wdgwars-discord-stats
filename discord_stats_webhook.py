@@ -43,6 +43,31 @@ import sys
 import urllib.error
 import urllib.request
 
+
+def _load_dotenv() -> None:
+    """Populate the environment from a .env file next to this script (or
+    $STATS_ENV_FILE), so users can fill in a text file instead of exporting.
+    Real environment variables always win.
+
+    Kept in sync with the identical helper in war_feed.py and
+    live_stats_channels.py (these are standalone scripts, none imports the
+    others, so this is a deliberate copy, not a fork)."""
+    path = os.environ.get("STATS_ENV_FILE") or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), ".env")
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+    except FileNotFoundError:
+        pass
+
+
+_load_dotenv()
+
 ME_URL = "https://wdgwars.pl/api/me"
 CELLS_URL = "https://wdgwars.pl/api/me/cells"
 USER_AGENT = "wdgwars-discord-stats/1.2 (+https://github.com/Yggdrasil-AI-labs/wdgwars-discord-stats)"

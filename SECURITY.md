@@ -26,8 +26,9 @@ does with them and what it does not.
 
 ## API key handling
 
-- The key is read from the `WDGWARS_API_KEY` environment variable (or a
-  `chmod 600` `.env` file you create). It is never hard-coded.
+- The key is read from the `WDGWARS_API_KEY` environment variable (or a `.env`
+  file the setup wizard creates for you; see "Config + state file handling"
+  below for exactly what protection that gets). It is never hard-coded.
 - It is never printed to the console or logs, and it is redacted from any error
   body before that error is shown (`scrub()` in both scripts).
 - Treat it like a password: it is a bearer credential for your account. Do not
@@ -53,8 +54,14 @@ rotate it at `wdgwars.pl/profile`.
 
 - The config and state files are written to your home directory with an atomic
   replace. They hold channel/message IDs and your field choices, not secrets.
-- The setup wizard writes `.env` with `chmod 600` (owner read/write only) where
-  the OS supports it. `.env` is gitignored.
+- The setup wizard (`live_stats_channels.py`'s `run_wizard()`) refuses to write
+  `.env` through a pre-existing symlink at that path, and creates the file at
+  mode 0600 atomically (the file is never briefly world-readable between
+  creation and permissioning). On Linux/macOS this is a real `chmod 600`
+  guarantee, and a failure to apply it is reported to you rather than ignored.
+  On Windows, file access is governed by NTFS ACLs, not POSIX mode bits, so
+  the `chmod` step is skipped there and the real protection is whatever your
+  Windows user-profile ACLs already give you. `.env` is gitignored either way.
 
 ## Dependencies
 
@@ -75,7 +82,10 @@ running, and understand that the credentials leave your device in that case.
   no code path that writes to your account.
 - **Over-permissioned bot:** documentation and the `--check` doctor steer you to
   the single Manage Channels permission, not Administrator.
-- **Committing secrets:** `.env` is gitignored and the setup wizard sets 0600.
+- **Committing secrets:** `.env` is gitignored and the setup wizard sets 0600
+  on Linux/macOS (see "Config + state file handling" for the Windows caveat).
+- **A pre-planted symlink at the `.env` path:** the setup wizard refuses to
+  write through it and aborts with a clear error instead of following it.
 
 ## Out of scope
 
